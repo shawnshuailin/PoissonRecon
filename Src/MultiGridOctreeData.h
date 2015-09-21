@@ -195,9 +195,9 @@ class Octree
 	typedef OctNode< TreeNodeData > TreeOctNode;
 public:
 	template< class V >
-	struct ProjectiveData
+	struct ProjectiveData//保存类似于颜色等附加于vertex上的属性值，猜测???
 	{
-		V v;
+		V v;//可能的赋值是Point3D等类型
 		Real w;
 		ProjectiveData( V vv=V(0) , Real ww=Real(0) ) : v(vv) , w(ww) { }
 		operator V (){ return w!=0 ? v/w : v*w; }
@@ -212,15 +212,15 @@ public:
 	};
 	struct PointData
 	{
-		Point3D< Real > position;
-		Real weightedCoarserDValue;
-		Real weight;
+		Point3D< Real > position;//位置
+		Real weightedCoarserDValue;//不知道干什么用的
+		Real weight;//权重，不知道有什么用
 		PointData( Point3D< Real > p=Point3D< Real >() , Real w=0 ) { position = p , weight = w , weightedCoarserDValue = Real(0); }
 	};
 	template< class Data >
 	struct SparseNodeData
 	{
-		std::vector< int > indices;
+		std::vector< int > indices;//感觉indices充当了映射表的功能
 		std::vector< Data > data;
 		int index( const TreeOctNode* node ) const { return node->nodeData.nodeIndex>=(int)indices.size() ? -1 : indices[ node->nodeData.nodeIndex ]; }
 	};

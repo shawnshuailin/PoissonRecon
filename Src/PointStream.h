@@ -42,7 +42,7 @@ class OrientedPointStream
 {
 public:
 	virtual ~OrientedPointStream( void ){}
-	virtual void reset( void ) = 0;
+	virtual void reset( void ) = 0;//´¿Ðéº¯Êý???
 	virtual bool nextPoint( OrientedPoint3D< Real >& p ) = 0;
 };
 template< class Real , class Data >

@@ -192,7 +192,7 @@ public:
 	class Neighbors5
 	{
 	public:
-		OctNode* neighbors[5][5][5];
+		OctNode* neighbors[5][5][5];//比一环邻域多了一层，考虑了二环邻域125个neighbor node
 		Neighbors5( void );
 		void clear( void );
 	};
@@ -233,7 +233,7 @@ public:
 	class Neighbors3
 	{
 	public:
-		OctNode* neighbors[3][3][3];
+		OctNode* neighbors[3][3][3];//27个neighbors
 		Neighbors3( void );
 		void clear( void );
 	};
@@ -248,7 +248,7 @@ public:
 	{
 		int _depth;
 	public:
-		Neighbors3* neighbors;
+		Neighbors3* neighbors;//octree node的27个neighbor，实际应该是26个，而且根据set的内容，这应该是一个数组，不同的depth neighbor存在不同的位置
 
 		NeighborKey3( void );
 		NeighborKey3( const NeighborKey3& key3 );

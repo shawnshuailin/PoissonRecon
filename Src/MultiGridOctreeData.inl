@@ -301,7 +301,7 @@ void Octree< Real >::MultiSplatPointData( ConstPointer( Real ) kernelDensityWeig
 	TreeOctNode* temp = &tree;
 	while( temp->depth()<=depth )
 	{
-		SplatPointData( temp , position , _v * Real( pow( 1<<temp->depth() , dim ) ) , dataInfo , neighborKey );
+		SplatPointData( temp , position , _v * Real( pow( (float)(1<<temp->depth()) , dim ) ) , dataInfo , neighborKey );
 		if( temp->depth()<depth )
 		{
 			if( !temp->children ) temp->initChildren();
@@ -548,32 +548,33 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 	if( splatDepth<0 ) splatDepth = 0;
 
 	_boundaryType = boundaryType;
-	if     ( _boundaryType<0 ) _boundaryType = -1;
+	if     ( _boundaryType<0 ) _boundaryType = -1;//看样子boundaryType有三种不同状态
 	else if( _boundaryType>0 ) _boundaryType =  1;
-	_splatDepth = splatDepth;
+	_splatDepth = splatDepth;//还是不懂这个depth的用法
 	_constrainValues = (constraintWeight>0);
 
 	XForm3x3< Real > xFormN;
-	for( int i=0 ; i<3 ; i++ ) for( int j=0 ; j<3 ; j++ ) xFormN(i,j) = xForm(i,j);
+	for( int i=0 ; i<3 ; i++ ) for( int j=0 ; j<3 ; j++ ) xFormN(i,j) = xForm(i,j);//应该只是旋转部分
 	xFormN = xFormN.transpose().inverse();
 	minDepth = std::min< int >( minDepth , maxDepth );	// minDepth <= maxDepth
 	fullDepth = std::max< int >( minDepth , std::min< int >( fullDepth , maxDepth ) );	// minDepth <= fullDepth <= maxDepth
+	//实在不明白为什么会有这么多的depth，fullDepth和maxDepth的区别以及fullDepth的用处???
 	// If _boundaryType==0, points are scaled to be in the [0.25,0.75]^3 cube so all depths have to be offset by
-	// and the minDepth has to be 2.
-	if( _boundaryType==0 )
+	// and the minDepth has to be 2.<---------------WHY???
+	if( _boundaryType==0 )//为什么boundaryType等于0这么特殊
 	{
-		minDepth++ , maxDepth++ , fullDepth++;
+		minDepth++ , maxDepth++ , fullDepth++;//深度增加是什么意思???
 		if( splatDepth ) splatDepth++;
 		minDepth = std::max< int >( minDepth , 2 );
 	}
 	// Otherwise the points are in the [0,1]^3 cube.
 	// However, for Neumann constraints, the function at depth 0 is constant so the system matrix is zero if there
 	// is no screening.
-#if 0
+#if 0 //这种if会不会被执行??? 查一查#if
 	else if( _boundaryType==1 && !_constrainValues ) minDepth = std::max< int >( minDepth , 1 );
 #endif
 
-	_fData.set( maxDepth , _boundaryType );
+	_fData.set( maxDepth , _boundaryType );//B样条曲线设置参数，边界条件类型一共有三种，查查NEUMANN boundary type
 	_minDepth = minDepth;
 	_fullDepth = fullDepth;
 	double pointWeightSum = 0;
@@ -582,47 +583,48 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 	int i , cnt=0;
 	TreeOctNode* temp;
 
-	typename TreeOctNode::NeighborKey3 neighborKey;
-	neighborKey.set( maxDepth );
+	typename TreeOctNode::NeighborKey3 neighborKey;//typename是什么关键词
+	neighborKey.set( maxDepth );//这里只是初始化空间，没有实际的neighbor node赋值操作
 
-	tree.setFullDepth( _fullDepth );
+	tree.setFullDepth( _fullDepth );//初始化设置child node
 
 	// Read through once to get the center and scale
 	{
 		double t = Time();
 		Point3D< Real > p;
 		OrientedPoint3D< PointReal > _p;
-		while( pointStream->nextPoint( _p ) )
+		while( pointStream->nextPoint( _p ) )//取点
 		{
-			p = xForm * Point3D< Real >(_p.p);
+			p = xForm * Point3D< Real >(_p.p);//变换
 			for( i=0 ; i<DIMENSION ; i++ )
 			{
-				if( !cnt || p[i]<min[i] ) min[i] = p[i];
+				if( !cnt || p[i]<min[i] ) min[i] = p[i];//找每个维度的最大最小值
 				if( !cnt || p[i]>max[i] ) max[i] = p[i];
 			}
-			cnt++;
+			cnt++;//point count
 		}
 
-		if( _boundaryType==0 ) _scale = std::max< Real >( max[0]-min[0] , std::max< Real >( max[1]-min[1] , max[2]-min[2] ) ) * 2;
-		else         _scale = std::max< Real >( max[0]-min[0] , std::max< Real >( max[1]-min[1] , max[2]-min[2] ) );
-		_center = ( max+min ) /2;
+		if( _boundaryType==0 ) _scale = std::max< Real >( max[0]-min[0] , std::max< Real >( max[1]-min[1] , max[2]-min[2] ) ) * 2;//最大一个维度的2倍，
+		//在boundaryType等于0时，points are scaled to be in the [0.25,0.75]^3 cube，不明白为什么
+		else         _scale = std::max< Real >( max[0]-min[0] , std::max< Real >( max[1]-min[1] , max[2]-min[2] ) );//最大的维度，这为什么要有区别
+		_center = ( max+min ) /2;//得到中心点坐标
 	}
 
-	_scale *= scaleFactor;
-	for( i=0 ; i<DIMENSION ; i++ ) _center[i] -= _scale/2;
+	_scale *= scaleFactor;//不知道这个scaleFactor的用处
+	for( i=0 ; i<DIMENSION ; i++ ) _center[i] -= _scale/2;//这个在干什么，不懂，难道又回去找最小值
 
 	// Update the transformation
 	{
 		XForm4x4< Real > trans = XForm4x4< Real >::Identity() , scale = XForm4x4< Real >::Identity();
 		for( int i=0 ; i<3 ; i++ ) scale(i,i) = (Real)(1./_scale ) , trans(3,i) = -_center[i];
-		xForm = scale * trans * xForm;
+		xForm = scale * trans * xForm;//旋转、平移、缩放
 	}
 
 	if( splatDepth>0 )
 	{
 		double t = Time();
 		cnt = 0;
-		pointStream->reset();
+		pointStream->reset();//reset搞毛啊，重新读一遍???
 		Point3D< Real > p , n;
 		OrientedPoint3D< PointReal > _p;
 		while( pointStream->nextPoint( _p ) )
@@ -671,7 +673,7 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 		myCenter = Point3D< Real >( Real(0.5) , Real(0.5) , Real(0.5) );
 		myWidth = Real(1.0);
 		Real normalLength = Real( Length( n ) );
-		if( isnan( normalLength ) || !isfinite( normalLength ) || normalLength<=EPSILON ) continue;
+		if( /*isnan( normalLength ) || !isfinite( normalLength ) || */normalLength<=EPSILON ) continue;
 		if( !useConfidence ) n /= normalLength;
 
 		Real pointWeight = Real(1.f);

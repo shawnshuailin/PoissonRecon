@@ -32,8 +32,8 @@ DAMAGE.
 #define MSVC_2010_FIX 1
 
 
-class BinaryNode
-{
+class BinaryNode//binarynode貌似是用来表示在一个维度情况下进行划分时的center和corner情况，因为octree在每个维度上划分时都是binary tree
+{//然后才会有相应的width，center position等信息
 public:
 	static inline int CenterCount( int depth ) { return  1<<depth; }
 	static inline int CornerCount( int depth ) { return (1<<depth)+1; }

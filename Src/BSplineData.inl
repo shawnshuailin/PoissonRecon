@@ -186,15 +186,15 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 	_boundaryType = boundaryType>0 ? 1 : ( boundaryType<0 ? -1 : 0 );
 
 	depth = maxDepth;
-	// [Warning] This assumes that the functions spacing is dual
-	functionCount = BinaryNode::CumulativeCenterCount( depth );
-	sampleCount   = BinaryNode::CenterCount( depth ) + BinaryNode::CornerCount( depth );
-	baseFunctions = NewPointer< PPolynomial< Degree > >( functionCount );
-	baseBSplines = NewPointer< BSplineComponents >( functionCount );
+	// [Warning] This assumes that the functions spacing is dual，不明白
+	functionCount = BinaryNode::CumulativeCenterCount( depth );//binary node是octree在每个单一维度上的简化情况，而function count是累积的???
+	sampleCount   = BinaryNode::CenterCount( depth ) + BinaryNode::CornerCount( depth );//B样条曲线的可采样点就是这些center加上corner，这些点有vertex value吧
+	baseFunctions = NewPointer< PPolynomial< Degree > >( functionCount );//base function，预分配空间
+	baseBSplines = NewPointer< BSplineComponents >( functionCount );//预分配空间
 
 	baseFunction = PPolynomial< Degree >::BSpline();
 	for( int i=0 ; i<=Degree ; i++ ) baseBSpline[i] = Polynomial< Degree >::BSplineComponent( i ).shift( double(-(Degree+1)/2) + i - 0.5 );
-	dBaseFunction = baseFunction.derivative();
+	dBaseFunction = baseFunction.derivative();//basefunction的导数
 	StartingPolynomial< Degree > sPolys[Degree+4];
 
 	for( int i=0 ; i<Degree+3 ; i++ )
@@ -238,17 +238,17 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 	for( size_t i=0 ; i<functionCount ; i++ )
 	{
 		BinaryNode::CenterAndWidth( int(i) , c , w );
-		baseFunctions[i] = baseFunction.scale(w).shift(c);
-		baseBSplines[i] = baseBSpline.scale(w).shift(c);
-		if( _boundaryType )
+		baseFunctions[i] = baseFunction.scale(w).shift(c);//base function，width是w，center是c
+		baseBSplines[i] = baseBSpline.scale(w).shift(c);//base BSpline function也一样
+		if( _boundaryType )//if(-1)是返回true还是false???
 		{
 			int d , off , r;
 			BinaryNode::DepthAndOffset( int(i) , d , off );
 			r = 1<<d;
-			if     ( off==0 && off==r-1 ) baseFunctions[i] = leftRightBaseFunction.scale(w).shift(c);
-			else if( off==0             ) baseFunctions[i] =      leftBaseFunction.scale(w).shift(c);
-			else if(           off==r-1 ) baseFunctions[i] =     rightBaseFunction.scale(w).shift(c);
-			if     ( off==0 && off==r-1 ) baseBSplines [i] = leftRightBSpline.scale(w).shift(c);
+			if     ( off==0 && off==r-1 ) baseFunctions[i] = leftRightBaseFunction.scale(w).shift(c);//那是不是意味着r=1，d=0
+			else if( off==0             ) baseFunctions[i] =      leftBaseFunction.scale(w).shift(c);//最左边
+			else if(           off==r-1 ) baseFunctions[i] =     rightBaseFunction.scale(w).shift(c);//最右边
+			if     ( off==0 && off==r-1 ) baseBSplines [i] = leftRightBSpline.scale(w).shift(c);//同上???
 			else if( off==0             ) baseBSplines [i] =      leftBSpline.scale(w).shift(c);
 			else if(           off==r-1 ) baseBSplines [i] =     rightBSpline.scale(w).shift(c);
 		}

@@ -294,7 +294,7 @@ int Execute( int argc , char* argv[] )
 	int paramNum = sizeof(params)/sizeof(cmdLineReadable*);
 	std::vector< char* > comments;
 
-	if( Verbose.set ) echoStdout=1;
+	if( Verbose.set ) echoStdout=1;//设置输出中间状态
 
 	XForm4x4< Real > xForm , iXForm;
 	if( XForm.set )
@@ -316,7 +316,7 @@ int Execute( int argc , char* argv[] )
 			fclose( fp );
 		}
 	}
-	else xForm = XForm4x4< Real >::Identity();
+	else xForm = XForm4x4< Real >::Identity();//开始参数选择时的精度是用在这种地方的
 	iXForm = xForm.inverse();
 
 	DumpOutput2( comments , "Running Screened Poisson Reconstruction (Version 7.0)\n" );
@@ -324,7 +324,7 @@ int Execute( int argc , char* argv[] )
 	for( int i=0 ; i<paramNum ; i++ )
 		if( params[i]->set )
 		{
-			params[i]->writeValue( str );
+			params[i]->writeValue( str );//输出校对给定的输入参数
 			if( strlen( str ) ) DumpOutput2( comments , "\t--%s %s\n" , params[i]->name , str );
 			else                DumpOutput2( comments , "\t--%s\n" , params[i]->name );
 		}
@@ -333,19 +333,19 @@ int Execute( int argc , char* argv[] )
 	double tt=Time();
 	Real isoValue = 0;
 
-	Octree< Real > tree;
+	Octree< Real > tree;//此类应该是一个类似于isoOctree的接口类，竟然包含了threads等实际执行中用到的参数
 	tree.threads = Threads.value;
-	if( !In.set )
+	if( !In.set )//两种极端情况，无输入数据
 	{
 		ShowUsage(argv[0]);
 		return 0;
 	}
-	if( !MaxSolveDepth.set ) MaxSolveDepth.value = Depth.value;
+	if( !MaxSolveDepth.set ) MaxSolveDepth.value = Depth.value;//未设定最大Octree深度
 	
 	OctNode< TreeNodeData >::SetAllocator( MEMORY_ALLOCATOR_BLOCK_SIZE );
 
 	t=Time();
-	int kernelDepth = KernelDepth.set ?  KernelDepth.value : Depth.value-2;
+	int kernelDepth = KernelDepth.set ?  KernelDepth.value : Depth.value-2;//这个kernel是什么kernel
 	if( kernelDepth>Depth.value )
 	{
 		fprintf( stderr,"[ERROR] %s can't be greater than %s: %d <= %d\n" , KernelDepth.name , Depth.name , KernelDepth.value , Depth.value );
@@ -354,20 +354,22 @@ int Execute( int argc , char* argv[] )
 
 	double maxMemoryUsage;
 	t=Time() , tree.maxMemoryUsage=0;
+	//输入的必须数据，位置与法向
 	typename Octree< Real >::template SparseNodeData< typename Octree< Real >::PointData >* pointInfo = new typename Octree< Real >::template SparseNodeData< typename Octree< Real >::PointData >();
-	typename Octree< Real >::template SparseNodeData< Point3D< Real > >* normalInfo = new typename Octree< Real >::template SparseNodeData< Point3D< Real > >();
+	typename Octree< Real >::template SparseNodeData< Point3D< Real > >* normalInfo = new typename Octree< Real >::template SparseNodeData< Point3D< Real > >();//法向，应该是两个输入数据，位置和法向
+	//两种weight，也不清楚用处
 	std::vector< Real >* kernelDensityWeights = new std::vector< Real >();
 	std::vector< Real >* centerWeights = new std::vector< Real >();
 	int pointCount;
-	typedef typename Octree< Real >::template ProjectiveData< Point3D< Real > > ProjectiveColor;
-	typename Octree< Real >::template SparseNodeData< ProjectiveColor > colorData;
+	typedef typename Octree< Real >::template ProjectiveData< Point3D< Real > > ProjectiveColor;//看不太懂，回去查一下新关键词 typename
+	typename Octree< Real >::template SparseNodeData< ProjectiveColor > colorData;//貌似是第三种输入数据，vertex上的color信息
 
 	char* ext = GetFileExtension( In.value );
 	if( Color.set && Color.value>0 )
 	{
 		OrientedPointStreamWithData< float , Point3D< unsigned char > >* pointStream;
 		if     ( !strcasecmp( ext , "bnpts" ) ) pointStream = new BinaryOrientedPointStreamWithData< float , Point3D< unsigned char > >( In.value );
-		else if( !strcasecmp( ext , "ply"   ) ) pointStream = new    PLYOrientedPointStreamWithData< float , Point3D< unsigned char > >( In.value , PlyColorProperties , 6 , ValidPlyColorProperties );
+		else if( !strcasecmp( ext , "ply"   ) ) pointStream = new PLYOrientedPointStreamWithData< float , Point3D< unsigned char > >( In.value , PlyColorProperties , 6 , ValidPlyColorProperties );
 		else                                    pointStream = new  ASCIIOrientedPointStreamWithData< float , Point3D< unsigned char > >( In.value , ReadASCIIColor );
 		pointCount = tree.template SetTree< float >( pointStream , MinDepth.value , Depth.value , FullDepth.value , kernelDepth , Real(SamplesPerNode.value) , Scale.value , Confidence.set , NormalWeights.set , PointWeight.value , AdaptiveExponent.value , *kernelDensityWeights , *pointInfo , *normalInfo , *centerWeights , colorData , xForm , BoundaryType.value , Complete.set );
 		delete pointStream;
@@ -382,8 +384,10 @@ int Execute( int argc , char* argv[] )
 	{
 		OrientedPointStream< float >* pointStream;
 		if     ( !strcasecmp( ext , "bnpts" ) ) pointStream = new BinaryOrientedPointStream< float >( In.value );
-		else if( !strcasecmp( ext , "ply"   ) ) pointStream = new    PLYOrientedPointStream< float >( In.value );
+		else if( !strcasecmp( ext , "ply"   ) ) pointStream = new    PLYOrientedPointStream< float >( In.value );//读取位置和法向信息
 		else                                    pointStream = new  ASCIIOrientedPointStream< float >( In.value );
+		//设置Octree用于重建，参数中包括了很多输入时给定的参数
+		//kernel depth在函数中对应于splatting depth，研究一下有什么用处
 		pointCount = tree.template SetTree< float >( pointStream , MinDepth.value , Depth.value , FullDepth.value , kernelDepth , Real(SamplesPerNode.value) , Scale.value , Confidence.set , NormalWeights.set , PointWeight.value , AdaptiveExponent.value , *kernelDensityWeights , *pointInfo , *normalInfo , *centerWeights , xForm , BoundaryType.value , Complete.set );
 		delete pointStream;
 	}
@@ -501,9 +505,9 @@ int main( int argc , char* argv[] )
 	double t = Time();
 
 	cmdLineParse( argc-1 , &argv[1] , sizeof(params)/sizeof(cmdLineReadable*) , params , 1 );
-	if( Density.set )
-		if( Color.set )
-			if( Double.set ) Execute< double , PlyColorAndValueVertex< float > >( argc , argv );
+	if( Density.set )//vertex density???
+		if( Color.set )//色彩
+			if( Double.set ) Execute< double , PlyColorAndValueVertex< float > >( argc , argv );//data precision
 			else             Execute< float  , PlyColorAndValueVertex< float > >( argc , argv );
 		else
 			if( Double.set ) Execute< double , PlyValueVertex< float > >( argc , argv );
@@ -525,7 +529,7 @@ int main( int argc , char* argv[] )
 		else printf( "Time: %.2f\n" , Time()-t );
 		HANDLE h = GetCurrentProcess();
 		PROCESS_MEMORY_COUNTERS pmc;
-		if( GetProcessMemoryInfo( h , &pmc , sizeof(pmc) ) ) printf( "Peak Memory (MB): %d\n" , pmc.PeakWorkingSetSize>>20 );
+ 		if( GetProcessMemoryInfo( h , &pmc , sizeof(pmc) ) ) printf( "Peak Memory (MB): %d\n" , pmc.PeakWorkingSetSize>>20 );
 	}
 #endif // _WIN32
 	return EXIT_SUCCESS;

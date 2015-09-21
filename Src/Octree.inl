@@ -1148,11 +1148,11 @@ OctNode< NodeData >::NeighborKey3::~NeighborKey3(void)
 template< class NodeData >
 void OctNode< NodeData >::NeighborKey3::set( int d )
 {
-	if( neighbors ) delete[] neighbors;
+	if( neighbors ) delete[] neighbors;//猜对了，neighbors果然是一个数组
 	neighbors = NULL;
 	_depth = d;
 	if( d<0 ) return;
-	neighbors = new Neighbors3[d+1];
+	neighbors = new Neighbors3[d+1];//但在声明时为什么要多声明一组，难道初始深度为0。应该是这样，上面对d<0情况进行了判断，没有d==0
 }
 template< class NodeData >
 template< class Real >
@@ -1285,14 +1285,14 @@ template< class NodeData >
 template< class Real >
 typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::setNeighbors( OctNode< NodeData >* root , Point3D< Real > p , int d )
 {
-	if( !neighbors[d].neighbors[1][1][1] || !neighbors[d].neighbors[1][1][1]->isInside( p ) )
+	if( !neighbors[d].neighbors[1][1][1] || !neighbors[d].neighbors[1][1][1]->isInside( p ) )//neighbor[1][1][1]实际上就是node本身吧
 	{
 		neighbors[d].clear();
 
-		if( !d ) neighbors[d].neighbors[1][1][1] = root;
+		if( !d ) neighbors[d].neighbors[1][1][1] = root;//深度为0时，就设置为root
 		else
 		{
-			Neighbors3& temp = setNeighbors( root , p , d-1 );
+			Neighbors3& temp = setNeighbors( root , p , d-1 );//还是递归设置
 
 			int i , j , k , x1 , y1 , z1 , x2 , y2 , z2;
 			Point3D< Real > c;
@@ -1302,13 +1302,13 @@ typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::set
 			Cube::FactorCornerIndex(   idx    , x1 , y1 , z1 );
 			Cube::FactorCornerIndex( (~idx)&7 , x2 , y2 , z2 );
 
-			if( !temp.neighbors[1][1][1]->children ) temp.neighbors[1][1][1]->initChildren();
+			if( !temp.neighbors[1][1][1]->children ) temp.neighbors[1][1][1]->initChildren();//细分到child node
 			for( i=0 ; i<2 ; i++ ) for( j=0 ; j<2 ; j++ ) for( k=0 ; k<2 ; k++ )
 				neighbors[d].neighbors[x2+i][y2+j][z2+k] = &temp.neighbors[1][1][1]->children[Cube::CornerIndex(i,j,k)];
 
-
+			//下面分别针对面、边、角点重合的node先进行了child node划分，然后找出其中相邻node
 			// Set the neighbors from across the faces
-			i=x1<<1;
+			i=x1<<1;//下面这六个node与当前node是面重合
 			if( temp.neighbors[i][1][1] )
 			{
 				if( !temp.neighbors[i][1][1]->children ) temp.neighbors[i][1][1]->initChildren();
@@ -1328,7 +1328,7 @@ typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::set
 			}
 
 			// Set the neighbors from across the edges
-			i=x1<<1 , j=y1<<1;
+			i=x1<<1 , j=y1<<1;//下面这些node与中心node是边重合
 			if( temp.neighbors[i][j][1] )
 			{
 				if( !temp.neighbors[i][j][1]->children ) temp.neighbors[i][j][1]->initChildren();
@@ -1348,7 +1348,7 @@ typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::set
 			}
 
 			// Set the neighbor from across the corner
-			i=x1<<1 , j=y1<<1 , k=z1<<1;
+			i=x1<<1 , j=y1<<1 , k=z1<<1;//下面这些node与中心node是角点重合
 			if( temp.neighbors[i][j][k] )
 			{
 				if( !temp.neighbors[i][j][k]->children ) temp.neighbors[i][j][k]->initChildren();
@@ -1422,7 +1422,7 @@ typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::get
 template< class NodeData >
 typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::setNeighbors( OctNode< NodeData >* node )
 {
-	int d = node->depth();
+	int d = node->depth();//貌似只是单层的neighbor设置
 	if( node==neighbors[d].neighbors[1][1][1] )
 	{
 		bool reset = false;
@@ -1498,6 +1498,7 @@ typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::set
 template< class NodeData >
 typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::setNeighbors( OctNode< NodeData >* node , bool flags[3][3][3] )
 {
+	//针对于那种限定depth的neighbor node设置，这里多加了flag判断
 	int d = node->depth();
 	if( node==neighbors[d].neighbors[1][1][1] )
 	{
@@ -1642,6 +1643,7 @@ typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::get
 template< class NodeData >
 void OctNode< NodeData >::NeighborKey3::setNeighbors( OctNode< NodeData >* node , typename OctNode< NodeData >::Neighbors5& neighbors )
 {
+	//neighbor5属于二环邻域的neighbor node
 	neighbors.clear();
 	if( !node ) return;
 	if( !node->parent ) neighbors.neighbors[2][2][2] = node;
