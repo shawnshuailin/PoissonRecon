@@ -100,6 +100,7 @@ int Square::ReflectCornerIndex(int idx,int edgeIndex){
 //////////
 // Cube //
 //////////
+//x|y|z就是二进制编码，从000到111刚好可以代表八个角点
 int Cube::CornerIndex( int x , int y , int z ){ return (z<<2)|(y<<1)|x; }
 void Cube::FactorCornerIndex( int idx , int& x , int& y , int& z ){ x = (idx>>0)&1 , y = (idx>>1)&1 , z = (idx>>2)&1; }
 int Cube::EdgeIndex(int orientation,int i,int j){return (i | (j<<1))|(orientation<<2);}
@@ -123,6 +124,7 @@ int Cube::FaceIndex( int dir , int offSet ){ return (dir<<1)|offSet; }
 
 void Cube::FactorFaceIndex( int idx , int& x , int& y , int& z )
 {
+	//这是一种约定的编码模式
 	x=y=z=0;
 	switch( idx )
 	{
@@ -136,6 +138,7 @@ void Cube::FactorFaceIndex( int idx , int& x , int& y , int& z )
 }
 void Cube::FactorFaceIndex( int idx , int& dir , int& offSet )
 {
+	//猜测，dir应该代表xyz三个坐标轴方向，取值00到10，offset区分正负，表示为0或者1
 	dir  = idx>>1;
 	offSet=idx &1;
 }

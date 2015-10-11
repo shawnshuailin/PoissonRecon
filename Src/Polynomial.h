@@ -34,17 +34,17 @@ DAMAGE.
 template< int Degree >
 class Polynomial{
 public:
-	double coefficients[Degree+1];
+	double coefficients[Degree+1];//Degree代表了多项式的幂次，因此一共有Degree+1个
 
 	Polynomial(void);
 	template<int Degree2>
 	Polynomial(const Polynomial<Degree2>& P);
-	double operator()( double t ) const;
-	double integral( double tMin , double tMax ) const;
+	double operator()( double t ) const;//给定未知数的值，算出多项式的值
+	double integral( double tMin , double tMax ) const;//在指定上下界范围内对多项式进行积分
 
-	int operator == (const Polynomial& p) const;
+	int operator == (const Polynomial& p) const;//判断多项式相等或不等
 	int operator != (const Polynomial& p) const;
-	int isZero(void) const;
+	int isZero(void) const;//判零或置零
 	void setZero(void);
 
 	template<int Degree2>
@@ -66,11 +66,11 @@ public:
 	Polynomial  operator *  ( double s ) const;
 	Polynomial  operator /  ( double s ) const;
 
-	Polynomial scale( double s ) const;
-	Polynomial shift( double t ) const;
+	Polynomial scale( double s ) const;//声明一个新多项式，多项式的参数除以scale
+	Polynomial shift( double t ) const;//所谓的shift就是把原变量移动了-t，然后所有的系数会发生变化，推导一下就可以看出规律
 
-	Polynomial<Degree-1> derivative(void) const;
-	Polynomial<Degree+1> integral(void) const;
+	Polynomial<Degree-1> derivative(void) const;//多项式的导数
+	Polynomial<Degree+1> integral(void) const;//多项式积分
 
 	void printnl(void) const;
 
@@ -83,8 +83,8 @@ public:
 	static void AddScaled(const Polynomial& p1,const Polynomial& p2,double w2,Polynomial& q);
 	static void AddScaled(const Polynomial& p1,double w1,const Polynomial& p2,Polynomial& q);
 
-	void getSolutions(double c,std::vector<double>& roots,double EPS) const;
-	int getSolutions( double c , double* roots , double EPS ) const;
+	void getSolutions(double c,std::vector<double>& roots,double EPS) const;//多项式求解，c是一个常量，roots用来保存结果，EPS表示极小值，用来判断系数是否接近零
+	int getSolutions( double c , double* roots , double EPS ) const;//同上
 
 	static Polynomial BSplineComponent( int i );
 };

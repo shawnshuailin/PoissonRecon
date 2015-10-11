@@ -34,22 +34,27 @@ DAMAGE.
 template<int Degree>
 class StartingPolynomial{
 public:
-	Polynomial<Degree> p;
-	double start;
-
+	Polynomial<Degree> p;//最高幂次为Degree的多项式
+	double start;//start好像是用来表示多项式的未知数赋值空间的最小值，所以在scale和shift操作中都受到了影响
+	//这些start只表示了每个多项式的最小取值，而各区间之间好像是连续定义的，但后一个start并不是上一个polynomial的结束，
+	//所有polynomial的定义域都是[start, infinity]
 	template<int Degree2>
-	StartingPolynomial<Degree+Degree2>  operator * (const StartingPolynomial<Degree2>& p) const;
-	StartingPolynomial scale(double s) const;
-	StartingPolynomial shift(double t) const;
-	int operator < (const StartingPolynomial& sp) const;
-	static int Compare(const void* v1,const void* v2);
+	StartingPolynomial<Degree+Degree2>  operator * (const StartingPolynomial<Degree2>& p) const;//多项式相乘
+	StartingPolynomial scale(double s) const;//参数缩放
+	StartingPolynomial shift(double t) const;//参数平移
+	int operator < (const StartingPolynomial& sp) const;//啥玩意，比较大小只比较start，没太看懂用法
+	static int Compare(const void* v1,const void* v2);//小于符号和这里的compare函数都是在container中对StartingPolynomial对象进行排序时需要的弱排序比较
 };
 
 template<int Degree>
-class PPolynomial
+class PPolynomial//查查PPolynomial和StaringPolynomial
 {
+//所谓的PPolynomial是指在表示B样条曲线时，对于不同定义域，其多项式表示并不相同，因此要用一个多项式vector来存储多个多项式
 public:
-	size_t polyCount;
+	size_t polyCount;//当前对象中有多少个StartingPolynomial
+	//这些start只表示了每个多项式的最小取值
+	//polys是一个array，存储了多个多项式，赋值空间连续，以各个多项式的start为分隔划分区间
+	//这里确实证明了PPolynomial中不同多项式的start的前后关系，但是下一个start并不是上一个多项式阈值范围的上限，所有的多项式上限都是infinity
 	StartingPolynomial<Degree>* polys;
 
 	PPolynomial(void);
@@ -58,7 +63,7 @@ public:
 
 	PPolynomial& operator = (const PPolynomial& p);
 
-	int size(void) const;
+	int size(void) const;//返回实际占用的内存空间
 
 	void set( size_t size );
 	// Note: this method will sort the elements in sps
@@ -70,6 +75,7 @@ public:
 	double integral( double tMin , double tMax ) const;
 	double Integral( void ) const;
 
+	//两个表示了多个多项式的对象之间的加减乘运算以及赋值操作，要按照start大小排序，难道两个中都没有start相等的情况出现，进一步验证start的意义
 	template<int Degree2>
 	PPolynomial<Degree>& operator = (const PPolynomial<Degree2>& p);
 

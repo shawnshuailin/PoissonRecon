@@ -33,15 +33,15 @@ DAMAGE.
 #include "Array.h"
 
 template< int Degree >
-struct BSplineElementCoefficients
+struct BSplineElementCoefficients//表示系数的struct
 {
-	int coeffs[Degree+1];
+	int coeffs[Degree+1];//degree+1个项，每一项的系数
 	BSplineElementCoefficients( void ){ memset( coeffs , 0 , sizeof( int ) * ( Degree+1 ) ); }
 	int& operator[]( int idx ){ return coeffs[idx]; }
 	const int& operator[]( int idx ) const { return coeffs[idx]; }
 };
 template< int Degree >
-struct BSplineElements : public std::vector< BSplineElementCoefficients< Degree > >
+struct BSplineElements : public std::vector< BSplineElementCoefficients< Degree > >//看来BSplineElements表示了多个BSpline Polynomial，用vector存储
 {
 	static const int _off = (Degree+1)/2;
 	void _addLeft ( int offset , int boundary );
@@ -54,7 +54,7 @@ public:
 		NEUMANN   =  1
 	};
 	// Coefficients are ordered as "/" "-" "\"
-	int denominator;
+	int denominator;//分母，什么的分母???
 
 	BSplineElements( void ) { denominator = 1; }
 	BSplineElements( int res , int offset , int boundary=NONE , int inset=0 );
@@ -64,7 +64,7 @@ public:
 
 	void print( FILE* fp=stdout ) const
 	{
-		for( int i=0 ; i<std::vector< BSplineElementCoefficients< Degree > >::size() ; i++ )
+		for( int i=0 ; i<std::vector< BSplineElementCoefficients< Degree > >::size() ; i++ )//这里调用size的意义在哪???，为什么不是this->size()
 		{
 			printf( "%d]" , i );
 			for( int j=0 ; j<=Degree ; j++ ) printf( " %d" , (*this)[i][j] );
@@ -87,7 +87,7 @@ public:
 	{
 		struct IntegralTables
 		{
-			double vv_ccIntegrals[2*Degree+1][2*Degree+1] , vv_cpIntegrals[(2*Degree+1)*2][2*Degree+1];
+			double vv_ccIntegrals[2*Degree+1][2*Degree+1] , vv_cpIntegrals[(2*Degree+1)*2][2*Degree+1];//难道是current child和current parent的区别???
 			double dv_ccIntegrals[2*Degree+1][2*Degree+1] , dv_cpIntegrals[(2*Degree+1)*2][2*Degree+1];
 			double vd_ccIntegrals[2*Degree+1][2*Degree+1] , vd_cpIntegrals[(2*Degree+1)*2][2*Degree+1];
 			double dd_ccIntegrals[2*Degree+1][2*Degree+1] , dd_cpIntegrals[(2*Degree+1)*2][2*Degree+1];
@@ -102,8 +102,9 @@ public:
 	{
 		struct ValueTables
 		{
-			double vValues[2*Degree+1][ 3*(2*Radius+1) ];
-			double dValues[2*Degree+1][ 3*(2*Radius+1) ];
+			double vValues[2*Degree+1][ 3*(2*Radius+1) ];//如果称作是radius，区间为[-radius..., 0, ..., radius]，
+			//而乘以3是因为index等于1是跟当前层neighbor的数据，剩下的两个是跟两个child neighbor的数据
+			double dValues[2*Degree+1][ 3*(2*Radius+1) ];//Degree是2*Degree+1是因为在两侧的边缘进行了特殊处理吧
 		};
 		std::vector< ValueTables > vTables;
 		double value( int depth , int off1 , int off2 , bool d , bool childParent=false ) const;

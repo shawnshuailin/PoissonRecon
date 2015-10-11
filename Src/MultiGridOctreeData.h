@@ -84,10 +84,10 @@ int omp_get_thread_num( void ){ return 0; }
 #endif // _OPENMP
 
 class TreeNodeData
-{
+{//不太明白这个类的意义，只有简单的两个变量，不存储其他信息???
 public:
-	static int NodeCount;
-	int nodeIndex;
+	static int NodeCount;//静态变量，用来在TreeNodeData声明时累加，赋值nodeIndex
+	int nodeIndex;//node索引???
 
 	TreeNodeData( void );
 	~TreeNodeData( void );
@@ -98,15 +98,23 @@ class VertexData
 	typedef OctNode< TreeNodeData > TreeOctNode;
 public:
 	static const int VERTEX_COORDINATE_SHIFT = ( sizeof( long long ) * 8 ) / 3;
+	//经猜测，下面函数主要想找出给定edge/face/node的中心点以及给定node的指定corner在指定深度时(maxDepth)在所有点中的排序index
+	//(这些点包括潜在的中心点和角点)，而且每个坐标轴单独处理，统一视为binarynode，利用binarynode中的函数来计算
+	//指定node，指定edge(eIndex)的中心点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	static long long   EdgeIndex( const TreeOctNode* node , int eIndex , int maxDepth , int index[DIMENSION] );
 	static long long   EdgeIndex( const TreeOctNode* node , int eIndex , int maxDepth );
+	//指定node，指定face(fIndex)的中心点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	static long long   FaceIndex( const TreeOctNode* node , int fIndex , int maxDepth,int index[DIMENSION] );
 	static long long   FaceIndex( const TreeOctNode* node , int fIndex , int maxDepth );
+	//指定node的指定corner(cIndex)点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	static long long CornerIndex( const TreeOctNode* node , int cIndex , int maxDepth , int index[DIMENSION] );
 	static long long CornerIndex( const TreeOctNode* node , int cIndex , int maxDepth );
+	//指定node的中心点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	static long long CenterIndex( const TreeOctNode* node , int maxDepth , int index[DIMENSION] );
 	static long long CenterIndex( const TreeOctNode* node , int maxDepth );
+	//指定node(知道depth和offset)的指定corner(cIndex)点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	static long long CornerIndex( int depth , const int offSet[DIMENSION] , int cIndex , int maxDepth , int index[DIMENSION] );
+	//指定node(知道depth和offset)的中心点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	static long long CenterIndex( int depth , const int offSet[DIMENSION] , int maxDepth , int index[DIMENSION] );
 	static long long CornerIndexKey( const int index[DIMENSION] );
 };

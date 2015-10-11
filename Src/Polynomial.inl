@@ -71,13 +71,13 @@ template<> double Polynomial< 0 >::operator() ( double t ) const { return coeffi
 template<> double Polynomial< 1 >::operator() ( double t ) const { return coefficients[0]+coefficients[1]*t; }
 template<> double Polynomial< 2 >::operator() ( double t ) const { return coefficients[0]+(coefficients[1]+coefficients[2]*t)*t; }
 template<int Degree>
-double Polynomial<Degree>::operator() ( double t ) const{
+double Polynomial<Degree>::operator() ( double t ) const{//给定未知数的值，算出多项式的值
 	double v=coefficients[Degree];
 	for( int d=Degree-1 ; d>=0 ; d-- ) v = v*t + coefficients[d];
 	return v;
 }
 template<int Degree>
-double Polynomial<Degree>::integral( double tMin , double tMax ) const
+double Polynomial<Degree>::integral( double tMin , double tMax ) const//在指定上下界范围内多多项式进行积分
 {
 	double v=0;
 	double t1,t2;
@@ -229,7 +229,7 @@ Polynomial<Degree> Polynomial<Degree>::operator / ( double s ) const
 	return q;
 }
 template<int Degree>
-Polynomial<Degree> Polynomial<Degree>::scale( double s ) const
+Polynomial<Degree> Polynomial<Degree>::scale( double s ) const//scale是对变量进行scale，所以要对s2不停的除以s
 {
 	Polynomial q=*this;
 	double s2=1.0;
@@ -240,7 +240,7 @@ Polynomial<Degree> Polynomial<Degree>::scale( double s ) const
 	return q;
 }
 template<int Degree>
-Polynomial<Degree> Polynomial<Degree>::shift( double t ) const
+Polynomial<Degree> Polynomial<Degree>::shift( double t ) const//所谓的shift就是把原变量移动了-t，然后所有的系数会发生变化，推导一下就可以看出规律
 {
 	Polynomial<Degree> q;
 	for(int i=0;i<=Degree;i++){
@@ -310,23 +310,25 @@ template< >
 Polynomial< 0 > Polynomial< 0 >::BSplineComponent( int i )
 {
 	Polynomial p;
-	p.coefficients[0] = 1.;
+	p.coefficients[0] = 1.;//最基本的基函数B Spline Base Function，函数区间由i来确定
 	return p;
 }
 template< int Degree >
-Polynomial< Degree > Polynomial< Degree >::BSplineComponent( int i )
+Polynomial< Degree > Polynomial< Degree >::BSplineComponent( int i )//函数中有scale和shift可以满足缩放和中心点移动的要求，这里就可以先计算出基函数
 {
-	Polynomial p;
+	//然后通过scale和shift来满足不同区间、不同中心点的要求
+	//i表示Knot span的区间，Degree表示B样条的幂次
+	Polynomial p;//为什么这里不用指定Degree???
 	if( i>0 )
 	{
 		Polynomial< Degree > _p = Polynomial< Degree-1 >::BSplineComponent( i-1 ).integral();
-		p -= _p;
+		p -= _p;//先减去低幂次多项式的积分
 		p.coefficients[0] += _p(1);
 	}
 	if( i<Degree )
 	{
-		Polynomial< Degree > _p = Polynomial< Degree-1 >::BSplineComponent( i ).integral();
-		p += _p;
+		Polynomial< Degree > _p = Polynomial< Degree-1 >::BSplineComponent( i ).integral();//这个简单的积分是什么意思???
+		p += _p;//这样加起来的东西算是什么B(0,1) = B(0,0).integral();???
 	}
 	return p;
 }

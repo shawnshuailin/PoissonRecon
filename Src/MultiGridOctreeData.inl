@@ -158,7 +158,7 @@ int Octree< Real >::SplatPointData( TreeOctNode* node , const Point3D< Real >& p
 	double x , dxdy , dxdydz , dx[DIMENSION][SPLAT_ORDER+1];
 	double width;
 	int off[3];
-	typename TreeOctNode::Neighbors3& neighbors = neighborKey.setNeighbors( node );
+	typename TreeOctNode::Neighbors3& neighbors = neighborKey.setNeighbors( node );//找出node的一环邻域octree node
 	Point3D<Real> center;
 	Real w;
 	node->centerAndWidth( center , w );
@@ -217,6 +217,7 @@ template< class Real >
 template< class V >
 Real Octree< Real >::SplatPointData( ConstPointer( Real ) kernelDensityWeights , const Point3D< Real >& position , const V& v , SparseNodeData< V >& dataInfo , typename TreeOctNode::NeighborKey3& neighborKey , int minDepth , int maxDepth , int dim )
 {
+	//v存储了被翻转的normal信息，dataInfo存储了normalInfo，应该是原始数据
 	double dx;
 	V _v;
 	TreeOctNode* temp;
@@ -226,19 +227,19 @@ Real Octree< Real >::SplatPointData( ConstPointer( Real ) kernelDensityWeights ,
 	Real myWidth = (Real)1.;
 
 	temp = &tree;
-	while( temp->depth()<_splatDepth )
+	while( temp->depth()<_splatDepth )//在node Depth小于splatDepth之前进行此操作
 	{
 		if( !temp->children ) fprintf( stderr , "[ERROR] Octree::SplatPointData\n" ) , exit( 0 );
-		int cIndex=TreeOctNode::CornerIndex( myCenter , position );
-		temp=&temp->children[cIndex];
-		myWidth/=2;
-		if( cIndex&1 ) myCenter[0] += myWidth/2;
+		int cIndex=TreeOctNode::CornerIndex( myCenter , position );//根据position和center的相对位置判断最近的cube corner index
+		temp=&temp->children[cIndex];//移动到这个corner相关的child node
+		myWidth/=2;//width减半
+		if( cIndex&1 ) myCenter[0] += myWidth/2;//更新center
 		else		   myCenter[0] -= myWidth/2;
 		if( cIndex&2 ) myCenter[1] += myWidth/2;
 		else 	  	   myCenter[1] -= myWidth/2;
 		if( cIndex&4 ) myCenter[2] += myWidth/2;
 		else 		   myCenter[2] -= myWidth/2;
-	}
+	}//width和center更新直到node Depth == splatDepth为止
 	Real weight , depth;
 	GetSampleDepthAndWeight( kernelDensityWeights , temp , position , neighborKey , depth , weight );
 
@@ -258,7 +259,7 @@ Real Octree< Real >::SplatPointData( ConstPointer( Real ) kernelDensityWeights ,
 		dx=1;
 	}
 	while( temp->depth()>topDepth ) temp=temp->parent;
-	while( temp->depth()<topDepth )
+	while( temp->depth()<topDepth )//针对Depth在上下移动temp node，但不太明确这么做的用意
 	{
 		if(!temp->children) temp->initChildren();
 		int cIndex=TreeOctNode::CornerIndex( myCenter , position );
@@ -419,8 +420,8 @@ template< class Real >
 void Octree< Real >::GetSampleDepthAndWeight( ConstPointer( Real ) kernelDensityWeights , TreeOctNode* node , const Point3D<Real>& position , typename TreeOctNode::NeighborKey3& neighborKey , Real& depth , Real& weight )
 {
 	TreeOctNode* temp=node;
-	weight = GetSamplesPerNode( kernelDensityWeights , temp , position , neighborKey );
-	if( weight>=(Real)1. ) depth = Real( temp->depth() + log( weight ) / log(double(1<<(DIMENSION-1))) );
+	weight = GetSamplesPerNode( kernelDensityWeights , temp , position , neighborKey );//返回了当前point position在node的加权weight
+	if( weight>=(Real)1. ) depth = Real( temp->depth() + log( weight ) / log(double(1<<(DIMENSION-1))) );//不懂???
 	else
 	{
 		Real oldWeight , newWeight;
@@ -428,7 +429,7 @@ void Octree< Real >::GetSampleDepthAndWeight( ConstPointer( Real ) kernelDensity
 		while( newWeight<(Real)1. && temp->parent )
 		{
 			temp=temp->parent;
-			oldWeight = newWeight;
+			oldWeight = newWeight;//不断向上刷新point在整个branch上的加权weight
 			newWeight = GetSamplesPerNode( kernelDensityWeights , temp , position, neighborKey );
 		}
 		depth = Real( temp->depth() + log( newWeight ) / log( newWeight / oldWeight ) );
@@ -449,9 +450,9 @@ Real Octree< Real >::GetSamplesPerNode( ConstPointer( Real ) kernelDensityWeight
 
 	for( int i=0 ; i<DIMENSION ; i++ )
 	{
-		x = ( center[i] - position[i] - width ) / width;
+		x = ( center[i] - position[i] - width ) / width;//[-1.5,-0.5]
 		dx[i][0] = 1.125 + 1.500*x + 0.500*x*x;
-		x = ( center[i] - position[i] ) / width;
+		x = ( center[i] - position[i] ) / width;//[-0.5,0.5]，为什么这里不一样
 		dx[i][1] = 0.750           -       x*x;
 
 		dx[i][2] = 1.0 - dx[i][1] - dx[i][0];
@@ -463,7 +464,7 @@ Real Octree< Real >::GetSamplesPerNode( ConstPointer( Real ) kernelDensityWeight
 		for( int k=0 ; k<3 ; k++ ) if( neighbors.neighbors[i][j][k] )
 			weight += Real( dxdy * dx[2][k] * kernelDensityWeights[ neighbors.neighbors[i][j][k]->nodeData.nodeIndex ] );
 	}
-	return weight;
+	return weight;//返回了当前node的加权weight
 }
 template< class Real >
 Real Octree< Real >::GetSamplesPerNode( ConstPointer( Real ) kernelDensityWeights , const TreeOctNode* node , const Point3D<Real>& position , typename TreeOctNode::ConstNeighborKey3& neighborKey )
@@ -498,17 +499,17 @@ Real Octree< Real >::GetSamplesPerNode( ConstPointer( Real ) kernelDensityWeight
 template< class Real >
 int Octree< Real >::UpdateWeightContribution( std::vector< Real >& kernelDensityWeights , TreeOctNode* node , const Point3D<Real>& position , typename TreeOctNode::NeighborKey3& neighborKey , Real weight )
 {
-	typename TreeOctNode::Neighbors3& neighbors = neighborKey.setNeighbors( node );
-	if( (int)kernelDensityWeights.size()<TreeNodeData::NodeCount ) kernelDensityWeights.resize( TreeNodeData::NodeCount , 0 );
+	typename TreeOctNode::Neighbors3& neighbors = neighborKey.setNeighbors( node );//设置了单层的一环邻域neighbor
+	if( (int)kernelDensityWeights.size()<TreeNodeData::NodeCount ) kernelDensityWeights.resize( TreeNodeData::NodeCount , 0 );//即使原来有weight，也被抹除了
 	double x , dxdy , dx[DIMENSION][3] , width;
 	Point3D< Real > center;
 	Real w;
-	node->centerAndWidth( center , w );
+	node->centerAndWidth( center , w );//当前node的center position和width
 	width = w;
 
-	for( int i=0 ; i<DIMENSION ; i++ )
+	for( int i=0 ; i<DIMENSION ; i++ )//一定要弄明白为什么这么算
 	{
-		x = ( center[i] - position[i] - width ) / width;
+		x = ( center[i] - position[i] - width ) / width;//单调递减函数???，x取值在[-1.5, -0.5]之间??? 为什么
 		dx[i][0] = 1.125 + 1.500*x + 0.500*x*x;
 		dx[i][1] = -0.25 - 2.*x - x*x;
 		dx[i][2] = 1. - dx[i][1] - dx[i][0];
@@ -519,12 +520,12 @@ int Octree< Real >::UpdateWeightContribution( std::vector< Real >& kernelDensity
 	//		0.125 / 0.75 / 0.125 across the three slices.
 	// Sampling at the center slice we get:
 	//		0.125^2 + 0.75^2 + 0.125^2 = 19/32
-	const double SAMPLE_SCALE = 1. / ( 0.125 * 0.125 + 0.75 * 0.75 + 0.125 * 0.125 );
+	const double SAMPLE_SCALE = 1. / ( 0.125 * 0.125 + 0.75 * 0.75 + 0.125 * 0.125 );//感觉像是用一个kernel来进行convolution
 	weight *= (Real)SAMPLE_SCALE;
 
 	for( int i=0 ; i<3 ; i++ ) for( int j=0 ; j<3 ; j++ )
 	{
-		dxdy = dx[0][i] * dx[1][j] * weight;
+		dxdy = dx[0][i] * dx[1][j] * weight;//这个算是对neighbor node的weight影响吗???
 		TreeOctNode** _neighbors = neighbors.neighbors[i][j];
 		for( int k=0 ; k<3 ; k++ ) if( _neighbors[k] ) kernelDensityWeights[ _neighbors[k]->nodeData.nodeIndex ] += Real( dxdy * dx[2][k] );
 	}
@@ -545,20 +546,24 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 							std::vector< Real >& kernelDensityWeights , SparseNodeData< PointData >& pointInfo , SparseNodeData< Point3D< Real > >& normalInfo , std::vector< Real >& centerWeights ,
 							XForm4x4< Real >& xForm , int boundaryType , bool makeComplete )
 {
-	if( splatDepth<0 ) splatDepth = 0;
-
+	//kernel Depth在函数中被替换为splatDepth，看来kernel 就是用来计算point density的
+	if( splatDepth<0 ) splatDepth = 0;//按照文中所写，splatDepth是比Depth要小，这是为了估算point density设置的
+	//看Kazhdan的注释，在早期版本中minDepth就是fullDepth，不知道这里为什么还要区分开
 	_boundaryType = boundaryType;
 	if     ( _boundaryType<0 ) _boundaryType = -1;//看样子boundaryType有三种不同状态
 	else if( _boundaryType>0 ) _boundaryType =  1;
-	_splatDepth = splatDepth;//还是不懂这个depth的用法
+	_splatDepth = splatDepth;//后面splat的时候会用到
 	_constrainValues = (constraintWeight>0);
 
 	XForm3x3< Real > xFormN;
 	for( int i=0 ; i<3 ; i++ ) for( int j=0 ; j<3 ; j++ ) xFormN(i,j) = xForm(i,j);//应该只是旋转部分
-	xFormN = xFormN.transpose().inverse();
+	xFormN = xFormN.transpose().inverse();//这两个操作在xFormN是规范旋转矩阵的情况下互相抵消，这里在干啥???
 	minDepth = std::min< int >( minDepth , maxDepth );	// minDepth <= maxDepth
 	fullDepth = std::max< int >( minDepth , std::min< int >( fullDepth , maxDepth ) );	// minDepth <= fullDepth <= maxDepth
 	//实在不明白为什么会有这么多的depth，fullDepth和maxDepth的区别以及fullDepth的用处???
+	//按照Kazhdan的注释，fullDepth是指过了这个深度，octree就可以adaptive，maxDepth是指octree的最大深度，
+	//早期版本使用minDepth来完成fullDepth的功能，现在可能用法已经完全不一样了
+	//Depth---Note that since the reconstructor adapts the octree to the sampling density, the specified reconstruction depth is only an upper bound.
 	// If _boundaryType==0, points are scaled to be in the [0.25,0.75]^3 cube so all depths have to be offset by
 	// and the minDepth has to be 2.<---------------WHY???
 	if( _boundaryType==0 )//为什么boundaryType等于0这么特殊
@@ -570,11 +575,17 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 	// Otherwise the points are in the [0,1]^3 cube.
 	// However, for Neumann constraints, the function at depth 0 is constant so the system matrix is zero if there
 	// is no screening.
-#if 0 //这种if会不会被执行??? 查一查#if
+#if 0 //if 0是屏蔽掉一些当前用不到但后面可能会用的代码，用的时候换成if 1就可以了
 	else if( _boundaryType==1 && !_constrainValues ) minDepth = std::max< int >( minDepth , 1 );
 #endif
 
-	_fData.set( maxDepth , _boundaryType );//B样条曲线设置参数，边界条件类型一共有三种，查查NEUMANN boundary type
+	//二次样条的某一曲线段只与相应的两段折线段，三个控制多边形顶点有关，改变其中一个顶点，将影响三段样条曲线段。
+	//同样的，对三次样条，某一曲线段由相应的三段折线段，四个控制点决定。
+	//spline is a numeric function that is piecewise-defined by polynomial functions, 
+	//and which possesses a high degree of smoothness at the places where the polynomial pieces connect
+	//In the computer-aided design and computer graphics, spline functions are constructed as linear combinations of B-splines with a set of control points.
+	_fData.set( maxDepth , _boundaryType );//B样条曲线设置参数，边界条件类型一共有三种，查查NEUMANN boundary type，这种boundary约束只要求
+	//边界的梯度保持为0就可以了
 	_minDepth = minDepth;
 	_fullDepth = fullDepth;
 	double pointWeightSum = 0;
@@ -583,10 +594,10 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 	int i , cnt=0;
 	TreeOctNode* temp;
 
-	typename TreeOctNode::NeighborKey3 neighborKey;//typename是什么关键词
+	typename TreeOctNode::NeighborKey3 neighborKey;//同上
 	neighborKey.set( maxDepth );//这里只是初始化空间，没有实际的neighbor node赋值操作
 
-	tree.setFullDepth( _fullDepth );//初始化设置child node
+	tree.setFullDepth( _fullDepth );//初始化设置child node，fullDepth下的所有child都有
 
 	// Read through once to get the center and scale
 	{
@@ -610,8 +621,8 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 		_center = ( max+min ) /2;//得到中心点坐标
 	}
 
-	_scale *= scaleFactor;//不知道这个scaleFactor的用处
-	for( i=0 ; i<DIMENSION ; i++ ) _center[i] -= _scale/2;//这个在干什么，不懂，难道又回去找最小值
+	_scale *= scaleFactor;//scaleFactor是单位cube与包围当前点云cube的比值
+	for( i=0 ; i<DIMENSION ; i++ ) _center[i] -= _scale/2;//利用这个操作，再加上后面的缩放操作，可以把点云中心点调整到(0.5)
 
 	// Update the transformation
 	{
@@ -624,28 +635,28 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 	{
 		double t = Time();
 		cnt = 0;
-		pointStream->reset();//reset搞毛啊，重新读一遍???
+		pointStream->reset();//reset搞啥
 		Point3D< Real > p , n;
 		OrientedPoint3D< PointReal > _p;
 		while( pointStream->nextPoint( _p ) )
 		{
-			p = xForm * Point3D< Real >(_p.p) , n = xFormN * Point3D< Real >(_p.n);
-			if( !_InBounds(p) ) continue;
+			p = xForm * Point3D< Real >(_p.p) , n = xFormN * Point3D< Real >(_p.n);//对点的位置和法向进行变换
+			if( !_InBounds(p) ) continue;//把boundary之外的点干掉
 			myCenter = Point3D< Real >( Real(0.5) , Real(0.5) , Real(0.5) );
-			myWidth = Real(1.0);
+			myWidth = Real(1.0);//这个是总的cube宽度，boundaryType为0时根据上面的scale已经被缩放到[0.25,0.75]范围内
 			Real weight=Real( 1. );
-			if( useConfidence ) weight = Real( Length(n) );
-			if( samplesPerNode>0 ) weight /= (Real)samplesPerNode;
+			if( useConfidence ) weight = Real( Length(n) );//如果有weight，weight与normal长度有关系，参考Kazhdan的解释
+			if( samplesPerNode>0 ) weight /= (Real)samplesPerNode;//参照kazhdan的解释，在每个node的sample大于1时，相当于每个sample贡献值再次分散
 			temp = &tree;
 			int d=0;
-			while( d<splatDepth )
+			while( d<splatDepth )//在splatDepth之前，这个点会被反复用于计算point density
 			{
-				UpdateWeightContribution( kernelDensityWeights , temp , p , neighborKey , weight );
-				if( !temp->children ) temp->initChildren();
-				int cIndex=TreeOctNode::CornerIndex( myCenter , p );
-				temp = temp->children + cIndex;
-				myWidth/=2;
-				if( cIndex&1 ) myCenter[0] += myWidth/2;
+				UpdateWeightContribution( kernelDensityWeights , temp , p , neighborKey , weight );//这里kernelDensityWeights貌似只是个指针，还没有内容
+				if( !temp->children ) temp->initChildren();//初始化child node
+				int cIndex=TreeOctNode::CornerIndex( myCenter , p );//判断出当前位置点p在哪一个child node上
+				temp = temp->children + cIndex;//移动指针到该child node
+				myWidth/=2;//细分，width要更新
+				if( cIndex&1 ) myCenter[0] += myWidth/2;//更新child node中心点的位置，重新计算p对于child node的weight和contribution
 				else           myCenter[0] -= myWidth/2;
 				if( cIndex&2 ) myCenter[1] += myWidth/2;
 				else           myCenter[1] -= myWidth/2;
@@ -653,11 +664,11 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 				else           myCenter[2] -= myWidth/2;
 				d++;
 			}
-			UpdateWeightContribution( kernelDensityWeights , temp , p , neighborKey , weight );
-			cnt++;
+			UpdateWeightContribution( kernelDensityWeights , temp , p , neighborKey , weight );//在d==splatDepth时再计算一次
+			cnt++;//
 		}
 	}
-	kernelDensityWeights.resize( TreeNodeData::NodeCount , 0 );
+	kernelDensityWeights.resize( TreeNodeData::NodeCount , 0 );//是被抹除了吗？
 
 	std::vector< PointData >& points = pointInfo.data;
 
@@ -668,13 +679,13 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 	while( pointStream->nextPoint( _p ) )
 	{
 		p = xForm * Point3D< Real >(_p.p) , n = xFormN * Point3D< Real >(_p.n);
-		n *= Real(-1.);
+		n *= Real(-1.);//normal被翻转了，为啥???
 		if( !_InBounds(p) ) continue;
 		myCenter = Point3D< Real >( Real(0.5) , Real(0.5) , Real(0.5) );
 		myWidth = Real(1.0);
 		Real normalLength = Real( Length( n ) );
 		if( /*isnan( normalLength ) || !isfinite( normalLength ) || */normalLength<=EPSILON ) continue;
-		if( !useConfidence ) n /= normalLength;
+		if( !useConfidence ) n /= normalLength;//如果不用weight的话就把normal单位化
 
 		Real pointWeight = Real(1.f);
 		if( samplesPerNode>0 && splatDepth ) pointWeight = SplatPointData( GetPointer( kernelDensityWeights ) , p , n , normalInfo , neighborKey , _minDepth , maxDepth );
@@ -684,7 +695,7 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 			int d=0;
 			if( splatDepth )
 			{
-				while( d<splatDepth )
+				while( d<splatDepth )//找到splatDepth处的octree node
 				{
 					int cIndex=TreeOctNode::CornerIndex(myCenter,p);
 					temp = &temp->children[cIndex];
@@ -699,7 +710,7 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 				}
 				pointWeight = (Real)1.0/GetSamplesPerNode( GetPointer( kernelDensityWeights ) , temp , p , neighborKey );
 			}
-			for( i=0 ; i<DIMENSION ; i++ ) n[i] *= pointWeight;
+			for( i=0 ; i<DIMENSION ; i++ ) n[i] *= pointWeight;//把pointweight加载到normal上，后面重建会用到
 			while( d<maxDepth )
 			{
 				if( !temp->children ) temp->initChildren();
@@ -713,13 +724,13 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 				if(cIndex&4) myCenter[2] += myWidth/2;
 				else		 myCenter[2] -= myWidth/2;
 				d++;
-			}
-			SplatPointData( temp , p , n , normalInfo , neighborKey );
+			}//找到maxDepth处的octree node
+			SplatPointData( temp , p , n , normalInfo , neighborKey );//论文中的splat point过程，要细看
 		}
 		pointWeightSum += pointWeight;
 		if( _constrainValues )
 		{
-			Real pointScreeningWeight = useNormalWeights ? Real( normalLength ) : Real(1.f);
+			Real pointScreeningWeight = useNormalWeights ? Real( normalLength ) : Real(1.f);//设置screen weight
 			int d = 0;
 			TreeOctNode* temp = &tree;
 			myCenter = Point3D< Real >( Real(0.5) , Real(0.5) , Real(0.5) );
@@ -737,12 +748,12 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 				}
 				else
 				{
-					points[idx].weight += pointScreeningWeight;
+					points[idx].weight += pointScreeningWeight;//加权位置约束
 					points[idx].position += p*pointScreeningWeight;
 				}
 
 				int cIndex = TreeOctNode::CornerIndex( myCenter , p );
-				if( !temp->children ) break;
+				if( !temp->children ) break;//没有child node时跳出
 				temp = &temp->children[cIndex];
 				myWidth /= 2;
 				if( cIndex&1 ) myCenter[0] += myWidth/2;
@@ -765,7 +776,7 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 	if( _constrainValues )
 		// Set the average position and scale the weights
 		for( TreeOctNode* node=tree.nextNode() ; node ; node=tree.nextNode(node) )
-			if( pointInfo.index( node )!=-1 )
+			if( pointInfo.index( node )!=-1 )//在sparse data中查找当前node是否存在
 			{
 				int idx = pointInfo.index( node );
 				points[idx].position /= points[idx].weight;
@@ -1501,6 +1512,7 @@ void Octree< Real >::SetCenterEvaluationStencil( const typename BSplineData< 2 >
 	for( int x=0 ; x<3 ; x++ ) for( int y=0 ; y<3 ; y++ ) for( int z=0 ; z<3 ; z++ )
 	{
 		int off[] = { center+x-1 , center+y-1 , center+z-1 };
+		//看来像是在每个维度上都算了一遍，然后相乘，倒是比较符合trivariate BSpline function的定义
 		stencil.values[x][y][z] = Real( evaluator.value( depth , center , off[0] , false , false ) * evaluator.value( depth , center , off[1] , false , false ) * evaluator.value( depth , center , off[2] , false , false ) );
 	}
 }
@@ -3131,11 +3143,13 @@ Pointer( V ) Octree< Real >::Evaluate( ConstPointer( V ) coefficients , int& res
 ////////////////
 long long VertexData::CenterIndex(const TreeOctNode* node,int maxDepth)
 {
+	//指定node的中心点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	int idx[DIMENSION];
 	return CenterIndex(node,maxDepth,idx);
 }
 long long VertexData::CenterIndex(const TreeOctNode* node,int maxDepth,int idx[DIMENSION])
 {
+	//指定node的中心点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	int d,o[3];
 	node->depthAndOffset(d,o);
 	for(int i=0;i<DIMENSION;i++) idx[i]=BinaryNode::CornerIndex( maxDepth+1 , d+1 , o[i]<<1 , 1 );
@@ -3143,16 +3157,19 @@ long long VertexData::CenterIndex(const TreeOctNode* node,int maxDepth,int idx[D
 }
 long long VertexData::CenterIndex( int depth , const int offSet[DIMENSION] , int maxDepth , int idx[DIMENSION] )
 {
+	//指定node(知道depth和offset)的中心点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	for(int i=0;i<DIMENSION;i++) idx[i]=BinaryNode::CornerIndex( maxDepth+1 , depth+1 , offSet[i]<<1 , 1 );
 	return (long long)(idx[0]) | (long long)(idx[1])<<VERTEX_COORDINATE_SHIFT | (long long)(idx[2])<<(2*VERTEX_COORDINATE_SHIFT);
 }
 long long VertexData::CornerIndex(const TreeOctNode* node,int cIndex,int maxDepth)
 {
+	//指定node的指定corner(cIndex)点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	int idx[DIMENSION];
 	return CornerIndex(node,cIndex,maxDepth,idx);
 }
 long long VertexData::CornerIndex( const TreeOctNode* node , int cIndex , int maxDepth , int idx[DIMENSION] )
 {
+	//指定node的指定corner(cIndex)点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	int x[DIMENSION];
 	Cube::FactorCornerIndex( cIndex , x[0] , x[1] , x[2] );
 	int d , o[3];
@@ -3162,6 +3179,7 @@ long long VertexData::CornerIndex( const TreeOctNode* node , int cIndex , int ma
 }
 long long VertexData::CornerIndex( int depth , const int offSet[DIMENSION] , int cIndex , int maxDepth , int idx[DIMENSION] )
 {
+	//指定node(知道depth和offset)的指定corner(cIndex)点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	int x[DIMENSION];
 	Cube::FactorCornerIndex( cIndex , x[0] , x[1] , x[2] );
 	for( int i=0 ; i<DIMENSION ; i++ ) idx[i] = BinaryNode::CornerIndex( maxDepth+1 , depth , offSet[i] , x[i] );
@@ -3172,11 +3190,13 @@ long long VertexData::CornerIndexKey( const int idx[DIMENSION] )
 	return (long long)(idx[0]) | (long long)(idx[1])<<VERTEX_COORDINATE_SHIFT | (long long)(idx[2])<<(2*VERTEX_COORDINATE_SHIFT);
 }
 long long VertexData::FaceIndex(const TreeOctNode* node,int fIndex,int maxDepth){
+	//指定node，指定face(fIndex)的中心点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	int idx[DIMENSION];
 	return FaceIndex(node,fIndex,maxDepth,idx);
 }
 long long VertexData::FaceIndex(const TreeOctNode* node,int fIndex,int maxDepth,int idx[DIMENSION])
 {
+	//指定node，指定face(fIndex)的中心点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	int dir,offset;
 	Cube::FactorFaceIndex(fIndex,dir,offset);
 	int d,o[3];
@@ -3185,13 +3205,20 @@ long long VertexData::FaceIndex(const TreeOctNode* node,int fIndex,int maxDepth,
 	idx[dir]=BinaryNode::CornerIndex(maxDepth+1,d,o[dir],offset);
 	return (long long)(idx[0]) | (long long)(idx[1])<<VERTEX_COORDINATE_SHIFT | (long long)(idx[2])<<(2*VERTEX_COORDINATE_SHIFT);
 }
-long long VertexData::EdgeIndex( const TreeOctNode* node , int eIndex , int maxDepth ){ int idx[DIMENSION] ; return EdgeIndex( node , eIndex , maxDepth , idx ); }
+long long VertexData::EdgeIndex( const TreeOctNode* node , int eIndex , int maxDepth )
+{ 
+	//指定node，指定edge(eIndex)的中心点，在深度达到maxDepth的全划分(center和corner)点序列中的index
+	int idx[DIMENSION] ; 
+	return EdgeIndex( node , eIndex , maxDepth , idx ); 
+}
 long long VertexData::EdgeIndex( const TreeOctNode* node , int eIndex , int maxDepth , int idx[DIMENSION] )
 {
+	//指定node，指定edge(eIndex)的中心点，在深度达到maxDepth的全划分(center和corner)点序列中的index
 	int o , i1 , i2;
 	int d , off[3];
-	node->depthAndOffset( d ,off );
-	Cube::FactorEdgeIndex( eIndex , o , i1 , i2 );
+	node->depthAndOffset( d ,off );//得到depth和offset的具体值
+	Cube::FactorEdgeIndex( eIndex , o , i1 , i2 );//根据edgeindex得到orientation等信息
+	//难道是把每一维都看作是一个binary node
 	for( int i=0 ; i<DIMENSION ; i++ ) idx[i] = BinaryNode::CornerIndex( maxDepth+1 , d+1 , off[i]<<1 , 1 );
 	switch(o)
 	{
@@ -3208,5 +3235,6 @@ long long VertexData::EdgeIndex( const TreeOctNode* node , int eIndex , int maxD
 			idx[1] = BinaryNode::CornerIndex( maxDepth+1 , d , off[1] , i2 );
 			break;
 	};
+	//最后还是通过移位操作来存储edge index
 	return (long long)(idx[0]) | (long long)(idx[1])<<VERTEX_COORDINATE_SHIFT | (long long)(idx[2])<<(2*VERTEX_COORDINATE_SHIFT);
 }

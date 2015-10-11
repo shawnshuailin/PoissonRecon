@@ -78,7 +78,7 @@ BSplineData< Degree >::BSplineData( void )
 {
 	functionCount = sampleCount = 0;
 	SetBSplineElementIntegrals< Degree   , Degree   >( _vvIntegrals );
-	SetBSplineElementIntegrals< Degree   , Degree-1 >( _vdIntegrals );
+	SetBSplineElementIntegrals< Degree   , Degree-1 >( _vdIntegrals );//出现d的地方就下降一个等级
 	SetBSplineElementIntegrals< Degree-1 , Degree   >( _dvIntegrals );
 	SetBSplineElementIntegrals< Degree-1 , Degree-1 >( _ddIntegrals );
 }
@@ -105,32 +105,35 @@ double BSplineData< Degree >::Integrator::dot( int depth , int off1 , int off2 ,
 	else
 	{
 		int ii , d = off2-off1 , res = (1<<depth);
-		if( off1<0 || off2<0 || off1>=res || off2>=res || d<-Degree || d>Degree ) return 0;
+		if( off1<0 || off2<0 || off1>=res || off2>=res || d<-Degree || d>Degree ) return 0;//首先检查offset，res是当前深度下所有node的最大值吧，
+		//还要保证这两个BSpline function相差在Degree之间，否则二者没有交集
 		if     ( off1<     Degree ) ii = off1;
-		else if( off1>=res-Degree ) ii = 2*Degree + off1 - (res-1);
+		else if( off1>=res-Degree ) ii = 2*Degree + off1 - (res-1);//一定是Degree与off之间的关系得出这个结果的，具体什么关系还不知道
 		else                        ii = Degree;
-		if     ( d1 && d2 ) return iTable.dd_ccIntegrals[ii][d+Degree];
-		else if( d1       ) return iTable.dv_ccIntegrals[ii][d+Degree];
+		if     ( d1 && d2 ) return iTable.dd_ccIntegrals[ii][d+Degree];//两个都是derivative???
+		else if( d1       ) return iTable.dv_ccIntegrals[ii][d+Degree];//一个是derivative
 		else if(       d2 ) return iTable.vd_ccIntegrals[ii][d+Degree];
-		else                return iTable.vv_ccIntegrals[ii][d+Degree];
+		else                return iTable.vv_ccIntegrals[ii][d+Degree];//两个都不是derivative
 	}
 }
 template< int Degree >
 template< int Radius >
 double BSplineData< Degree >::CenterEvaluator< Radius >::value( int depth , int off1 , int off2 , bool d , bool childParent ) const
 {
+	//这里的childParent是一个Flag，标志两个node是否在两个不同的Depth下
 	if( depth<0 || depth>=int( vTables.size() ) ) return 0.;
 	if( childParent )
 	{
-		int c = off1&1;
-		off1 >>= 1 , depth--;
+		int c = off1&1;//保留off1的最后一位，这一位代表了在当前Depth划分时的offset，下面除以2求其parent index的时候就会把这个信息抹掉
+		off1 >>= 1 , depth--;//为什么肯定off1就比off2多了一层，非要在深度上减一
 		const typename CenterEvaluator::ValueTables& vTable = vTables[depth];
 		int ii , dd = off1-off2 , res = (1<<depth);
 		if( depth<0 || off1<0 || off2<0 || off1>=res || off2>=res || dd<-Radius || dd>Radius ) return 0;
 		if     ( off2<     Degree ) ii = off2;
-		else if( off2>=res-Degree ) ii = 2*Degree + off2 - (res-1);
+		else if( off2>=res-Degree ) ii = 2*Degree + off2 - (res-1);//估计中间符合条件的只占了ii=Degree那一个数组，剩下都分散了
 		else                        ii = Degree;
-		if( d ) return vTable.dValues[ii][(dd+Radius)*3+2*c];
+		if( d ) return vTable.dValues[ii][(dd+Radius)*3+2*c];//明白了，之所以有*3的约束，index为1时放了在同一个Depth下的数据，见下面的code
+		//而index为0或者2时放了两个child的数据
 		else    return vTable.vValues[ii][(dd+Radius)*3+2*c];
 	}
 	else
@@ -141,7 +144,7 @@ double BSplineData< Degree >::CenterEvaluator< Radius >::value( int depth , int 
 		if     ( off2<     Degree ) ii = off2;
 		else if( off2>=res-Degree ) ii = 2*Degree + off2 - (res-1);
 		else                        ii = Degree;
-		if( d ) return vTable.dValues[ii][(dd+Radius)*3+1];
+		if( d ) return vTable.dValues[ii][(dd+Radius)*3+1];//乘以3之后，只取第一个，剩下的两个是两个child的数据
 		else    return vTable.vValues[ii][(dd+Radius)*3+1];
 	}
 }
@@ -187,13 +190,16 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 
 	depth = maxDepth;
 	// [Warning] This assumes that the functions spacing is dual，不明白
+	//难道在binaryNode的每个维度上都构建了functionCount个baseFunction
 	functionCount = BinaryNode::CumulativeCenterCount( depth );//binary node是octree在每个单一维度上的简化情况，而function count是累积的???
 	sampleCount   = BinaryNode::CenterCount( depth ) + BinaryNode::CornerCount( depth );//B样条曲线的可采样点就是这些center加上corner，这些点有vertex value吧
-	baseFunctions = NewPointer< PPolynomial< Degree > >( functionCount );//base function，预分配空间
-	baseBSplines = NewPointer< BSplineComponents >( functionCount );//预分配空间
+	baseFunctions = NewPointer< PPolynomial< Degree > >( functionCount );//base function，预分配空间，PPolynomial本身就表示多个多项式的叠加，现在相当于二次叠加
+	//多项式幂次最高为2，那么拟合就需要两段曲线，三个控制点，这个更像是box Filter用来进行scalar function平滑的
+	baseBSplines = NewPointer< BSplineComponents >( functionCount );//预分配空间，BSplineComponents与PPolynomial有啥区别
+	//BSplineComponents没有指明自变量空间
 
-	baseFunction = PPolynomial< Degree >::BSpline();
-	for( int i=0 ; i<=Degree ; i++ ) baseBSpline[i] = Polynomial< Degree >::BSplineComponent( i ).shift( double(-(Degree+1)/2) + i - 0.5 );
+	baseFunction = PPolynomial< Degree >::BSpline();//Degree等于2的BSpline，作为平滑方程，经过推导，应该就是box Filter进行三次卷积后形成的平滑方程
+	for( int i=0 ; i<=Degree ; i++ ) baseBSpline[i] = Polynomial< Degree >::BSplineComponent( i ).shift( double(-(Degree+1)/2) + i - 0.5 );//为什么shift这么多???没看懂
 	dBaseFunction = baseFunction.derivative();//basefunction的导数
 	StartingPolynomial< Degree > sPolys[Degree+4];
 
@@ -237,13 +243,14 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 	double c , w;
 	for( size_t i=0 ; i<functionCount ; i++ )
 	{
-		BinaryNode::CenterAndWidth( int(i) , c , w );
-		baseFunctions[i] = baseFunction.scale(w).shift(c);//base function，width是w，center是c
+		BinaryNode::CenterAndWidth( int(i) , c , w );//找出center和width
+		baseFunctions[i] = baseFunction.scale(w).shift(c);//base function，width是w，center是c，对基函数进行缩放和平移
 		baseBSplines[i] = baseBSpline.scale(w).shift(c);//base BSpline function也一样
 		if( _boundaryType )//if(-1)是返回true还是false???
 		{
+			//这里应该是对边界情况单独进行处理，off=r-1，而且r=1<<d，那么r-1就是深度为d下的最后一个node
 			int d , off , r;
-			BinaryNode::DepthAndOffset( int(i) , d , off );
+			BinaryNode::DepthAndOffset( int(i) , d , off );//找出划分深度和在同一深度下的offset
 			r = 1<<d;
 			if     ( off==0 && off==r-1 ) baseFunctions[i] = leftRightBaseFunction.scale(w).shift(c);//那是不是意味着r=1，d=0
 			else if( off==0             ) baseFunctions[i] =      leftBaseFunction.scale(w).shift(c);//最左边
@@ -255,7 +262,7 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 	}
 }
 template< int Degree >
-double BSplineData< Degree >::dot( int depth1 ,  int off1 , int depth2 , int off2 , bool d1 , bool d2 , bool inset ) const
+double BSplineData< Degree >::dot( int depth1 ,  int off1 , int depth2 , int off2 , bool d1 , bool d2 , bool inset ) const//两个BSplineData的点乘
 {
 	const int _Degree1 = (d1 ? (Degree-1) : Degree) , _Degree2 = (d2 ? (Degree-1) : Degree);
 	int sums[ Degree+1 ][ Degree+1 ];
@@ -313,7 +320,7 @@ double BSplineData< Degree >::value( int depth ,  int off , double smoothingRadi
 template< int Degree >
 void BSplineData< Degree >::setIntegrator( Integrator& integrator , bool inset , bool useDotRatios ) const
 {
-	integrator.iTables.resize( depth+1 );
+	integrator.iTables.resize( depth+1 );//估计要为每一层设置integrator table，i和j一个是从[0,2*Degree]，另一个是从[-Degree, Degree]
 	for( int d=0 ; d<=depth ; d++ ) for( int i=0 ; i<=2*Degree ; i++ ) for( int j=-Degree ; j<=Degree ; j++ )
 	{
 		int res = 1<<d , ii = (i<=Degree ? i : i+res-1 - 2*Degree );
@@ -331,7 +338,7 @@ void BSplineData< Degree >::setIntegrator( Integrator& integrator , bool inset ,
 	for( int d=1 ; d<=depth ; d++ ) for( int i=0 ; i<=2*Degree ; i++ ) for( int j=-Degree ; j<=Degree ; j++ )
 	{
 		int res = 1<<d , ii = (i<=Degree ? i : i+(res/2)-1 - 2*Degree );
-		for( int c=0 ; c<2 ; c++ )
+		for( int c=0 ; c<2 ; c++ )//这是???
 		{
 			integrator.iTables[d].vv_cpIntegrals[2*i+c][j+Degree] = dot( d , 2*ii+c , d-1 , ii+j , false , false , inset );
 			integrator.iTables[d].dv_cpIntegrals[2*i+c][j+Degree] = dot( d , 2*ii+c , d-1 , ii+j , true  , false , inset );
@@ -354,7 +361,7 @@ void BSplineData< Degree >::setCenterEvaluator( CenterEvaluator< Radius >& evalu
 	for( int d=0 ; d<=depth ; d++ ) for( int i=0 ; i<=2*Degree ; i++ ) for( int j=-Radius ; j<=Radius ; j++ ) for( int k=-1 ; k<=1 ; k++ )
 	{
 		int res = 1<<d , ii = (i<=Degree ? i : i+res-1 - 2*Degree );
-		double s = 0.5+ii+j+0.25*k;
+		double s = 0.5+ii+j+0.25*k;//这是什么公式???
 		evaluator.vTables[d].vValues[i][(j+Radius)*3+(k+1)] = value( d , ii ,  smoothingRadius , s/res , false , inset );
 		evaluator.vTables[d].dValues[i][(j+Radius)*3+(k+1)] = value( d , ii , dSmoothingRadius , s/res , true  , inset );
 	}
@@ -649,7 +656,7 @@ void BSplineElements< Degree >::upSample( BSplineElements< Degree >& high ) cons
 	exit( 0 );
 }
 template<>
-void BSplineElements< 1 >::upSample( BSplineElements< 1 >& high ) const
+void BSplineElements< 1 >::upSample( BSplineElements< 1 >& high ) const//这...，没看懂在上采样什么东西???
 {
 	high.resize( size()*2 );
 	high.assign( high.size() , BSplineElementCoefficients<1>() );
@@ -723,11 +730,11 @@ void SetBSplineElementIntegrals( double integrals[Degree1+1][Degree2+1] )
 {
 	for( int i=0 ; i<=Degree1 ; i++ )
 	{
-		Polynomial< Degree1 > p1 = Polynomial< Degree1 >::BSplineComponent( i );
+		Polynomial< Degree1 > p1 = Polynomial< Degree1 >::BSplineComponent( i );//p1的幂次为Degree1，range index为i
 		for( int j=0 ; j<=Degree2 ; j++ )
 		{
-			Polynomial< Degree2 > p2 = Polynomial< Degree2 >::BSplineComponent( j );
-			integrals[i][j] = ( p1 * p2 ).integral( 0 , 1 );
+			Polynomial< Degree2 > p2 = Polynomial< Degree2 >::BSplineComponent( j );//p2的幂次为Degree2，range index为j
+			integrals[i][j] = ( p1 * p2 ).integral( 0 , 1 );//先进行多项式相乘，然后积分，区间为[0,1]，不明白为啥
 		}
 	}
 }

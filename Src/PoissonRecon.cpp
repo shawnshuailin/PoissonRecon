@@ -122,7 +122,8 @@ cmdLineReadable
 	NoComments( "noComments" ) ,
 	PolygonMesh( "polygonMesh" ) ,
 	Confidence( "confidence" ) ,
-	NormalWeights( "nWeights" ) ,
+	NormalWeights( "nWeights" ) ,//Enabling this flag tells the reconstructor to use the size of the normals to modulate the interpolation weights. 
+	//When the flag is not enabled, all points are given the same weight.
 	NonManifold( "nonManifold" ) ,
 	ASCII( "ascii" ) ,
 	Density( "density" ) ,
@@ -130,13 +131,14 @@ cmdLineReadable
 	Double( "double" );
 
 cmdLineInt
-	Depth( "depth" , 8 ) ,
-	CGDepth( "cgDepth" , 0 ) ,
+	Depth( "depth" , 8 ) ,//这是octree的最大深度，但有可能octree自适应之后的深度比这个小
+	CGDepth( "cgDepth" , 0 ) ,//This integer is the depth up to which a conjugate-gradients solver will be used to solve the linear system. 
+	//Beyond this depth Gauss-Seidel relaxation will be used.
 	KernelDepth( "kernelDepth" ) ,
 	AdaptiveExponent( "adaptiveExp" , 1 ) ,
 	Iters( "iters" , 8 ) ,
 	VoxelDepth( "voxelDepth" , -1 ) ,
-	FullDepth( "fullDepth" , DEFAULT_FULL_DEPTH ) ,
+	FullDepth( "fullDepth" , DEFAULT_FULL_DEPTH ) ,//full depth就是指在这个深度之前所有octree node是不能adaptive的，必须包含所有的node
 	MinDepth( "minDepth" , 0 ) ,
 	MaxSolveDepth( "maxSolveDepth" ) ,
 	BoundaryType( "boundary" , 1 ) ,
@@ -144,8 +146,10 @@ cmdLineInt
 
 cmdLineFloat
 	Color( "color" , 16.f ) ,
-	SamplesPerNode( "samplesPerNode" , 1.5f ) ,
-	Scale( "scale" , 1.1f ) ,
+	SamplesPerNode( "samplesPerNode" , 1.5f ) ,//This floating point value specifies the minimum number of sample points 
+	//that should fall within an octree node as the octree construction is adapted to sampling density. For noise-free samples, 
+	//small values in the range [1.0 - 5.0] can be used. For more noisy samples, larger values may be needed.
+	Scale( "scale" , 1.1f ) ,//This floating point value specifies the ratio between the diameter of the cube used for reconstruction and the diameter of the samples' bounding cube.
 	CSSolverAccuracy( "cgAccuracy" , float(1e-3) ) ,
 	PointWeight( "pointWeight" , 4.f );
 
@@ -355,13 +359,15 @@ int Execute( int argc , char* argv[] )
 	double maxMemoryUsage;
 	t=Time() , tree.maxMemoryUsage=0;
 	//输入的必须数据，位置与法向
+	//typename是显式告诉编译器，后面定义的一大串东西是一个类型，而不是一个变量，否则*在解释时会被误解，其次c++规定，在没有歧义时也要用，如等号后半段
+	//sparseNodeData应该指的是单步求解中的矩阵A，是由basis function梯度的乘积的积分组成
 	typename Octree< Real >::template SparseNodeData< typename Octree< Real >::PointData >* pointInfo = new typename Octree< Real >::template SparseNodeData< typename Octree< Real >::PointData >();
 	typename Octree< Real >::template SparseNodeData< Point3D< Real > >* normalInfo = new typename Octree< Real >::template SparseNodeData< Point3D< Real > >();//法向，应该是两个输入数据，位置和法向
 	//两种weight，也不清楚用处
 	std::vector< Real >* kernelDensityWeights = new std::vector< Real >();
 	std::vector< Real >* centerWeights = new std::vector< Real >();
 	int pointCount;
-	typedef typename Octree< Real >::template ProjectiveData< Point3D< Real > > ProjectiveColor;//看不太懂，回去查一下新关键词 typename
+	typedef typename Octree< Real >::template ProjectiveData< Point3D< Real > > ProjectiveColor;//同上，typename还是用来定义类型的
 	typename Octree< Real >::template SparseNodeData< ProjectiveColor > colorData;//貌似是第三种输入数据，vertex上的color信息
 
 	char* ext = GetFileExtension( In.value );
@@ -388,6 +394,7 @@ int Execute( int argc , char* argv[] )
 		else                                    pointStream = new  ASCIIOrientedPointStream< float >( In.value );
 		//设置Octree用于重建，参数中包括了很多输入时给定的参数
 		//kernel depth在函数中对应于splatting depth，研究一下有什么用处
+		//samplesPerNode应该是在多个point被划分到同一个node的时候sample的多少
 		pointCount = tree.template SetTree< float >( pointStream , MinDepth.value , Depth.value , FullDepth.value , kernelDepth , Real(SamplesPerNode.value) , Scale.value , Confidence.set , NormalWeights.set , PointWeight.value , AdaptiveExponent.value , *kernelDensityWeights , *pointInfo , *normalInfo , *centerWeights , xForm , BoundaryType.value , Complete.set );
 		delete pointStream;
 	}

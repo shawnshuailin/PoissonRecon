@@ -37,9 +37,9 @@ template< class NodeData > const int OctNode< NodeData >::DepthShift=5;
 template< class NodeData > const int OctNode< NodeData >::OffsetShift = ( sizeof(long long)*8 - DepthShift ) / 3;
 template< class NodeData > const int OctNode< NodeData >::DepthMask=(1<<DepthShift)-1;
 template< class NodeData > const int OctNode< NodeData >::OffsetMask=(1<<OffsetShift)-1;
-template< class NodeData > const int OctNode< NodeData >::OffsetShift1=DepthShift;
-template< class NodeData > const int OctNode< NodeData >::OffsetShift2=OffsetShift1+OffsetShift;
-template< class NodeData > const int OctNode< NodeData >::OffsetShift3=OffsetShift2+OffsetShift;
+template< class NodeData > const int OctNode< NodeData >::OffsetShift1=DepthShift;//低位是depth，从depthshift到depthshift+offsetshift是第一个offset
+template< class NodeData > const int OctNode< NodeData >::OffsetShift2=OffsetShift1+OffsetShift;//这是第二个offset
+template< class NodeData > const int OctNode< NodeData >::OffsetShift3=OffsetShift2+OffsetShift;//这是第三个offset
 
 template< class NodeData > int OctNode< NodeData >::UseAlloc=0;
 template< class NodeData > Allocator<OctNode< NodeData > > OctNode< NodeData >::NodeAllocator;
@@ -71,10 +71,11 @@ OctNode< NodeData >::~OctNode(void){
 template< class NodeData >
 void OctNode< NodeData >::setFullDepth( int maxDepth )
 {
+	//maxDepth代表了完全八叉树的深度，因此这里要对所有maxDepth之上的child node进行初始化，迭代进行
 	if( maxDepth )
 	{
 		if( !children ) initChildren();
-		for( int i=0 ; i<8 ; i++ ) children[i].setFullDepth( maxDepth-1 );
+		for( int i=0 ; i<8 ; i++ ) children[i].setFullDepth( maxDepth-1 );//迭代设定child node
 	}
 }
 
@@ -95,16 +96,17 @@ int OctNode< NodeData >::initChildren( void )
 		return 0;
 	}
 	int d , off[3];
-	depthAndOffset( d , off );
+	depthAndOffset( d , off );//当前node的深度和offset
 	for( int i=0 ; i<2 ; i++ ) for( int j=0 ; j<2 ; j++ ) for( int k=0 ; k<2 ; k++ )
 	{
 		int idx=Cube::CornerIndex(i,j,k);
 		children[idx].parent = this;
 		children[idx].children = NULL;
 		int off2[3];
-		off2[0] = (off[0]<<1)+i;
-		off2[1] = (off[1]<<1)+j;
-		off2[2] = (off[2]<<1)+k;
+		off2[0] = (off[0]<<1)+i;//感觉这个off所代表的偏移记录了node本身以及其所有parent节点在每一次octree划分时所处的位置
+		off2[1] = (off[1]<<1)+j;//根据这个off可以迅速定位在每一层划分时，这个节点当时的父节点所处的划分位置
+		off2[2] = (off[2]<<1)+k;//这套offset的index系统因为在不同depth下会产生重复，因此必须与depth相配合，才能找出正确的node
+		//如果size(long long)等于16，那么offset中每一个index的长度是41bit，足够作为每一层的index
 		children[idx]._depthAndOffset = Index( d+1 , off2 );
 	}
 	return 1;
@@ -112,7 +114,7 @@ int OctNode< NodeData >::initChildren( void )
 template< class NodeData >
 inline void OctNode< NodeData >::Index(int depth,const int offset[3],short& d,short off[3]){
 	d=short(depth);
-	off[0]=short((1<<depth)+offset[0]-1);
+	off[0]=short((1<<depth)+offset[0]-1);//这个是绝对索引, 1<<depth是上面所有层的node总数，本层node的index初始值就是1<<depth-1
 	off[1]=short((1<<depth)+offset[1]-1);
 	off[2]=short((1<<depth)+offset[2]-1);
 }
@@ -120,6 +122,7 @@ inline void OctNode< NodeData >::Index(int depth,const int offset[3],short& d,sh
 template< class NodeData >
 inline void OctNode< NodeData >::depthAndOffset( int& depth , int offset[DIMENSION] ) const
 {
+	//这个变量在节点声明时就存储了depth和offset，现在只是进行逆操作把对应值取出来
 	depth = int( _depthAndOffset & DepthMask );
 	offset[0] = int( (_depthAndOffset>>OffsetShift1) & OffsetMask );
 	offset[1] = int( (_depthAndOffset>>OffsetShift2) & OffsetMask );
@@ -128,6 +131,7 @@ inline void OctNode< NodeData >::depthAndOffset( int& depth , int offset[DIMENSI
 template< class NodeData >
 inline void OctNode< NodeData >::centerIndex( int index[DIMENSION] ) const
 {
+	//根据深度和offset计算出当前节点在binaryNode情况下的center index
 	int d , off[DIMENSION];
 	depthAndOffset( d , off );
 	for( int i=0 ; i<DIMENSION ; i++ ) index[i] = BinaryNode::CenterIndex( d , off[i] );
@@ -135,6 +139,9 @@ inline void OctNode< NodeData >::centerIndex( int index[DIMENSION] ) const
 template< class NodeData >
 inline unsigned long long OctNode< NodeData >::Index( int depth , const int offset[3] )
 {
+	//这个函数是把node的depth和offset经偏移操作后放在变量_depthAndOffset中
+	//这些偏移的位数是提前约定好的
+	//返回值应该与_depthAndOffset相等，offset属于相对偏移
 	unsigned long long idx=0;
 	idx |= ( ( (unsigned long long)(depth    ) ) & DepthMask  );
 	idx |= ( ( (unsigned long long)(offset[0]) ) & OffsetMask ) << OffsetShift1;
@@ -146,9 +153,9 @@ template< class NodeData >
 inline int OctNode< NodeData >::depth( void ) const {return int( _depthAndOffset & DepthMask );}
 template< class NodeData >
 inline void OctNode< NodeData >::DepthAndOffset(const long long& index,int& depth,int offset[3]){
-	depth=int(index&DepthMask);
-	offset[0]=(int((index>>OffsetShift1)&OffsetMask)+1)&(~(1<<depth));
-	offset[1]=(int((index>>OffsetShift2)&OffsetMask)+1)&(~(1<<depth));
+	depth=int(index&DepthMask);//先求出当前节点的depth
+	offset[0]=(int((index>>OffsetShift1)&OffsetMask)+1)&(~(1<<depth));//后一个位与操作相当于减去1<<depth
+	offset[1]=(int((index>>OffsetShift2)&OffsetMask)+1)&(~(1<<depth));//那么这里的index应该记录的是当前node在octree中的绝对索引，现在要转化成相对的offset
 	offset[2]=(int((index>>OffsetShift3)&OffsetMask)+1)&(~(1<<depth));
 }
 template< class NodeData >
@@ -158,17 +165,17 @@ template< class Real >
 void OctNode< NodeData >::centerAndWidth( Point3D<Real>& center , Real& width ) const
 {
 	int depth , offset[3];
-	depthAndOffset( depth , offset );
-	width = Real( 1.0 / (1<<depth) );
-	for( int dim=0 ; dim<DIMENSION ; dim++ ) center.coords[dim] = Real( 0.5+offset[dim] ) * width;
+	depthAndOffset( depth , offset );//找出当前节点的深度和offset
+	width = Real( 1.0 / (1<<depth) );//因为进行了归一化操作，因此节点的width与深度关系可以直接计算
+	for( int dim=0 ; dim<DIMENSION ; dim++ ) center.coords[dim] = Real( 0.5+offset[dim] ) * width;//各个坐标轴的中心点也与offset相关
 }
 template< class NodeData >
 template< class Real >
-bool OctNode< NodeData >::isInside( Point3D< Real > p ) const
+bool OctNode< NodeData >::isInside( Point3D< Real > p ) const//根据中心点位置和width判断给定数据点是否在OctNode内
 {
 	Point3D< Real > c;
 	Real w;
-	centerAndWidth( c , w );
+	centerAndWidth( c , w );//中心点位置和width
 	w /= 2;
 	return (c[0]-w)<p[0] && p[0]<=(c[0]+w) && (c[1]-w)<p[1] && p[1]<=(c[1]+w) && (c[2]-w)<p[2] && p[2]<=(c[2]+w);
 }
@@ -176,7 +183,7 @@ template< class NodeData >
 template< class Real >
 inline void OctNode< NodeData >::CenterAndWidth(const long long& index,Point3D<Real>& center,Real& width){
 	int depth,offset[3];
-	depth=index&DepthMask;
+	depth=index&DepthMask;//利用绝对索引获得center和width
 	offset[0]=(int((index>>OffsetShift1)&OffsetMask)+1)&(~(1<<depth));
 	offset[1]=(int((index>>OffsetShift2)&OffsetMask)+1)&(~(1<<depth));
 	offset[2]=(int((index>>OffsetShift3)&OffsetMask)+1)&(~(1<<depth));
@@ -186,6 +193,7 @@ inline void OctNode< NodeData >::CenterAndWidth(const long long& index,Point3D<R
 
 template< class NodeData >
 int OctNode< NodeData >::maxDepth(void) const{
+	//返回当前节点的所有子节点的最大深度
 	if(!children){return 0;}
 	else{
 		int c,d;
@@ -199,6 +207,7 @@ int OctNode< NodeData >::maxDepth(void) const{
 template< class NodeData >
 size_t OctNode< NodeData >::nodes( void ) const
 {
+	//返回当前节点的所有子节点数目，包括自己
 	if( !children ) return 1;
 	else
 	{
@@ -221,6 +230,7 @@ size_t OctNode< NodeData >::leaves( void ) const
 template< class NodeData >
 size_t OctNode< NodeData >::maxDepthLeaves( int maxDepth ) const
 {
+	//给出在深度小于maxDepth时当前节点包含的叶节点数目
 	if( depth()>maxDepth ) return 0;
 	if( !children ) return 1;
 	else
@@ -231,7 +241,7 @@ size_t OctNode< NodeData >::maxDepthLeaves( int maxDepth ) const
 	}
 }
 template< class NodeData >
-const OctNode< NodeData >* OctNode< NodeData >::root(void) const{
+const OctNode< NodeData >* OctNode< NodeData >::root(void) const{//返回根节点
 	const OctNode* temp=this;
 	while(temp->parent){temp=temp->parent;}
 	return temp;
@@ -241,9 +251,11 @@ const OctNode< NodeData >* OctNode< NodeData >::root(void) const{
 template< class NodeData >
 const OctNode< NodeData >* OctNode< NodeData >::nextBranch( const OctNode* current ) const
 {
+	//如果current不存在父节点或者current就是当前节点，就返回NULL
+	//不太明白为什么current等于当前节点就返回NULL
 	if( !current->parent || current==this ) return NULL;
-	if(current-current->parent->children==Cube::CORNERS-1) return nextBranch( current->parent );
-	else return current+1;
+	if(current-current->parent->children==Cube::CORNERS-1) return nextBranch( current->parent );//有可能会返回其父节点的下一个sibling
+	else return current+1;//如果current不是其父节点的最后一个子节点，就返回其下一个sibling
 }
 template< class NodeData >
 OctNode< NodeData >* OctNode< NodeData >::nextBranch(OctNode* current){
@@ -254,9 +266,10 @@ OctNode< NodeData >* OctNode< NodeData >::nextBranch(OctNode* current){
 template< class NodeData >
 const OctNode< NodeData >* OctNode< NodeData >::prevBranch( const OctNode* current ) const
 {
+	//如果current不存在父节点或者current就是当前节点，就返回NULL
 	if( !current->parent || current==this ) return NULL;
-	if( current-current->parent->children==0 ) return prevBranch( current->parent );
-	else return current-1;
+	if( current-current->parent->children==0 ) return prevBranch( current->parent );//有可能会返回其父节点的上一个sibling
+	else return current-1;//如果current不是其父节点的第一个子节点，就返回其上一个sibling
 }
 template< class NodeData >
 OctNode< NodeData >* OctNode< NodeData >::prevBranch( OctNode* current )
@@ -267,18 +280,18 @@ OctNode< NodeData >* OctNode< NodeData >::prevBranch( OctNode* current )
 }
 template< class NodeData >
 const OctNode< NodeData >* OctNode< NodeData >::nextLeaf(const OctNode* current) const{
-	if(!current){
+	if(!current){//如果没指明current，则返回当前节点的第一个子节点，有可能是自己
 		const OctNode< NodeData >* temp=this;
 		while(temp->children){temp=&temp->children[0];}
 		return temp;
 	}
-	if(current->children){return current->nextLeaf();}
-	const OctNode* temp=nextBranch(current);
+	if(current->children){return current->nextLeaf();}//如果当期节点存在子节点，则返回子节点中的第一个
+	const OctNode* temp=nextBranch(current);//如果current为根节点或者current节点就是当前节点，返回值为NULL
 	if(!temp){return NULL;}
-	else{return temp->nextLeaf();}
+	else{return temp->nextLeaf();}//否则找出下一个sibling的叶节点并返回
 }
 template< class NodeData >
-OctNode< NodeData >* OctNode< NodeData >::nextLeaf(OctNode* current){
+OctNode< NodeData >* OctNode< NodeData >::nextLeaf(OctNode* current){//注释同上
 	if(!current){
 		OctNode< NodeData >* temp=this;
 		while(temp->children){temp=&temp->children[0];}
@@ -293,6 +306,7 @@ OctNode< NodeData >* OctNode< NodeData >::nextLeaf(OctNode* current){
 template< class NodeData >
 const OctNode< NodeData >* OctNode< NodeData >::nextNode( const OctNode* current ) const
 {
+	//找出下一个会被访问到的节点
 	if( !current ) return this;
 	else if( current->children ) return &current->children[0];
 	else return nextBranch(current);
@@ -300,6 +314,7 @@ const OctNode< NodeData >* OctNode< NodeData >::nextNode( const OctNode* current
 template< class NodeData >
 OctNode< NodeData >* OctNode< NodeData >::nextNode( OctNode* current )
 {
+	//找出下一个会被访问到的节点
 	if( !current ) return this;
 	else if( current->children ) return &current->children[0];
 	else return nextBranch( current );
@@ -310,9 +325,9 @@ void OctNode< NodeData >::printRange(void) const
 {
 	Point3D< float > center;
 	float width;
-	centerAndWidth(center,width);
+	centerAndWidth(center,width);//当前节点的center和width
 	for(int dim=0;dim<DIMENSION;dim++){
-		printf("%[%f,%f]",center.coords[dim]-width/2,center.coords[dim]+width/2);
+		printf("%[%f,%f]",center.coords[dim]-width/2,center.coords[dim]+width/2);//当前节点在归一化octree中的距离范围
 		if(dim<DIMENSION-1){printf("x");}
 		else printf("\n");
 	}
@@ -728,6 +743,7 @@ inline int OctNode< NodeData >::ChildOverlap(int dx,int dy,int dz,int d,int cRad
 template< class NodeData >
 template< class Real >
 OctNode< NodeData >* OctNode< NodeData >::getNearestLeaf(const Point3D<Real>& p){
+	//找出离p最近的当前节点下的子节点，有可能是自己
 	Point3D<Real> center;
 	Real width;
 	OctNode< NodeData >* temp;
@@ -736,7 +752,7 @@ OctNode< NodeData >* OctNode< NodeData >::getNearestLeaf(const Point3D<Real>& p)
 	centerAndWidth(center,width);
 	temp=this;
 	while(temp->children){
-		cIndex=CornerIndex(center,p);
+		cIndex=CornerIndex(center,p);//返回离p最近的corner index
 		temp=&temp->children[cIndex];
 		width/=2;
 		if(cIndex&1){center.coords[0]+=width/2;}
@@ -755,7 +771,7 @@ const OctNode< NodeData >* OctNode< NodeData >::getNearestLeaf(const Point3D<Rea
 	Real temp,dist2;
 	if(!children){return this;}
 	for(int i=0;i<Cube::CORNERS;i++){
-		temp=SquareDistance(children[i].center,p);
+		temp=SquareDistance(children[i].center,p);//这个通过欧式距离来查找，也是迭代查找
 		if(!i || temp<dist2){
 			dist2=temp;
 			nearest=i;
@@ -766,11 +782,12 @@ const OctNode< NodeData >* OctNode< NodeData >::getNearestLeaf(const Point3D<Rea
 
 template< class NodeData >
 int OctNode< NodeData >::CommonEdge(const OctNode< NodeData >* node1,int eIndex1,const OctNode< NodeData >* node2,int eIndex2){
+	//经验证是正确的，但是思路有点复杂，目的是判断给出的两条边是否在共同的父节点上处于同一条公共边上，而不是判断两条边是否是重合的边
 	int o1,o2,i1,i2,j1,j2;
 
-	Cube::FactorEdgeIndex(eIndex1,o1,i1,j1);
-	Cube::FactorEdgeIndex(eIndex2,o2,i2,j2);
-	if(o1!=o2){return 0;}
+	Cube::FactorEdgeIndex(eIndex1,o1,i1,j1);//找出node1上eIndex1指定的边的orientation等信息
+	Cube::FactorEdgeIndex(eIndex2,o2,i2,j2);//同上
+	if(o1!=o2){return 0;}//如果两个边在不同的坐标轴上，肯定不是公共边，返回0
 
 	int dir[2];
 	int idx1[2];
@@ -781,13 +798,13 @@ int OctNode< NodeData >::CommonEdge(const OctNode< NodeData >* node1,int eIndex1
 		case 2:	dir[0]=0;	dir[1]=1;	break;
 	};
 	int d1,d2,off1[3],off2[3];
-	node1->depthAndOffset(d1,off1);
-	node2->depthAndOffset(d2,off2);
+	node1->depthAndOffset(d1,off1);//返回node1的depth和offset
+	node2->depthAndOffset(d2,off2);//同上
 	idx1[0]=off1[dir[0]]+(1<<d1)+i1;
 	idx1[1]=off1[dir[1]]+(1<<d1)+j1;
 	idx2[0]=off2[dir[0]]+(1<<d2)+i2;
 	idx2[1]=off2[dir[1]]+(1<<d2)+j2;
-	if(d1>d2){
+	if(d1>d2){//证明两个node还有可能不在同一个depth上
 		idx2[0]<<=(d1-d2);
 		idx2[1]<<=(d1-d2);
 	}
@@ -801,7 +818,7 @@ int OctNode< NodeData >::CommonEdge(const OctNode< NodeData >* node1,int eIndex1
 template< class NodeData >
 template< class Real >
 int OctNode< NodeData >::CornerIndex(const Point3D<Real>& center,const Point3D<Real>& p){
-	int cIndex=0;
+	int cIndex=0;//根据点的位置与中心点位置关系来确定corner index，找出当前节点中离p最近的corner
 	if(p.coords[0]>center.coords[0]){cIndex|=1;}
 	if(p.coords[1]>center.coords[1]){cIndex|=2;}
 	if(p.coords[2]>center.coords[2]){cIndex|=4;}
@@ -825,11 +842,13 @@ OctNode< NodeData >& OctNode< NodeData >::operator = ( const OctNode< NodeData2 
 }
 template< class NodeData >
 int OctNode< NodeData >::CompareForwardDepths(const void* v1,const void* v2){
+	//判断depth是否相同，难道对于形参是void的情况在调用时可以不用带括号
 	return ((const OctNode< NodeData >*)v1)->depth-((const OctNode< NodeData >*)v2)->depth;
 }
 template< class NodeData >
 int OctNode< NodeData >::CompareByDepthAndXYZ( const void* v1 , const void* v2 )
 {
+	//根据节点的深度以及offset的值判断两个node是否相同，不同还需要返回差异值
 	const OctNode< NodeData > *n1 = (*(const OctNode< NodeData >**)v1);
 	const OctNode< NodeData > *n2 = (*(const OctNode< NodeData >**)v2);
 	if( n1->d!=n2->d ) return int(n1->d)-int(n2->d);
@@ -842,12 +861,13 @@ int OctNode< NodeData >::CompareByDepthAndXYZ( const void* v1 , const void* v2 )
 long long _InterleaveBits( int p[3] )
 {
 	long long key = 0;
-	for( int i=0 ; i<32 ; i++ ) key |= ( ( p[0] & (1<<i) )<<(2*i) ) | ( ( p[1] & (1<<i) )<<(2*i+1) ) | ( ( p[2] & (1<<i) )<<(2*i+2) );
+	for( int i=0 ; i<32 ; i++ ) key |= ( ( p[0] & (1<<i) )<<(2*i) ) | ( ( p[1] & (1<<i) )<<(2*i+1) ) | ( ( p[2] & (1<<i) )<<(2*i+2) );//这样p[0]下一位的取值移位后会与p[2]当前位数字重合
 	return key;
 }
 template< class NodeData >
 int OctNode< NodeData >::CompareByDepthAndZIndex( const void* v1 , const void* v2 )
 {
+	//暂时不明白这个函数的用意何在???
 	const OctNode< NodeData >* n1 = (*(const OctNode< NodeData >**)v1);
 	const OctNode< NodeData >* n2 = (*(const OctNode< NodeData >**)v2);
 	int d1 , off1[3] , d2 , off2[3];
@@ -865,12 +885,13 @@ int OctNode< NodeData >::CompareForwardPointerDepths( const void* v1 , const voi
 {
 	const OctNode< NodeData >* n1 = (*(const OctNode< NodeData >**)v1);
 	const OctNode< NodeData >* n2 = (*(const OctNode< NodeData >**)v2);
-	if(n1->d!=n2->d){return int(n1->d)-int(n2->d);}
-	while( n1->parent!=n2->parent )
+	if(n1->d!=n2->d){return int(n1->d)-int(n2->d);}//先判断是否在同一深度上
+	while( n1->parent!=n2->parent )//回溯父节点，直到遇到公共父节点
 	{
 		n1=n1->parent;
 		n2=n2->parent;
 	}
+	//找出二者在父节点相同时的offset差异
 	if(n1->off[0]!=n2->off[0]){return int(n1->off[0])-int(n2->off[0]);}
 	if(n1->off[1]!=n2->off[1]){return int(n1->off[1])-int(n2->off[1]);}
 	return int(n1->off[2])-int(n2->off[2]);
@@ -887,7 +908,7 @@ int OctNode< NodeData >::CompareBackwardPointerDepths(const void* v1,const void*
 template< class NodeData >
 template< class Real >
 inline int OctNode< NodeData >::Overlap2(const int &depth1,const int offSet1[DIMENSION],const Real& multiplier1,const int &depth2,const int offSet2[DIMENSION],const Real& multiplier2){
-	int d=depth2-depth1;
+	int d=depth2-depth1;//depth2一定比depth1要大???
 	Real w=multiplier2+multiplier1*(1<<d);
 	Real w2=Real((1<<(d-1))-0.5);
 	if(
@@ -938,9 +959,9 @@ const OctNode< NodeData >* OctNode< NodeData >::__faceNeighbor(int dir,int off) 
 template< class NodeData >
 OctNode< NodeData >* OctNode< NodeData >::edgeNeighbor(int edgeIndex,int forceChildren){
 	int idx[2],o,i[2];
-	Cube::FactorEdgeIndex(edgeIndex,o,i[0],i[1]);
+	Cube::FactorEdgeIndex(edgeIndex,o,i[0],i[1]);//现根据edgeindex找出它的三个index坐标
 	switch(o){
-		case 0:	idx[0]=1;	idx[1]=2;	break;
+		case 0:	idx[0]=1;	idx[1]=2;	break;//假设分别代表xyz
 		case 1:	idx[0]=0;	idx[1]=2;	break;
 		case 2:	idx[0]=0;	idx[1]=1;	break;
 	};
@@ -988,12 +1009,12 @@ const OctNode< NodeData >* OctNode< NodeData >::__edgeNeighbor(int o,const int i
 }
 template< class NodeData >
 OctNode< NodeData >* OctNode< NodeData >::__edgeNeighbor(int o,const int i[2],const int idx[2],int forceChildren){
-	if(!parent){return NULL;}
-	int pIndex=int(this-parent->children);
+	if(!parent){return NULL;}//没有父节点，没有Neighbor
+	int pIndex=int(this-parent->children);//这是个什么操作，没看懂
 	int aIndex,x[DIMENSION];
 
-	Cube::FactorCornerIndex(pIndex,x[0],x[1],x[2]);
-	aIndex=(~((i[0] ^ x[idx[0]]) | ((i[1] ^ x[idx[1]])<<1))) & 3;
+	Cube::FactorCornerIndex(pIndex,x[0],x[1],x[2]);//得到角点位置
+	aIndex=(~((i[0] ^ x[idx[0]]) | ((i[1] ^ x[idx[1]])<<1))) & 3;//^代表异或
 	pIndex^=(7 ^ (1<<o));
 	if(aIndex==1)	{	// I can get the neighbor from the parent's face adjacent neighbor
 		OctNode* temp=parent->__faceNeighbor(idx[0],i[0],0);
@@ -1152,7 +1173,7 @@ void OctNode< NodeData >::NeighborKey3::set( int d )
 	neighbors = NULL;
 	_depth = d;
 	if( d<0 ) return;
-	neighbors = new Neighbors3[d+1];//但在声明时为什么要多声明一组，难道初始深度为0。应该是这样，上面对d<0情况进行了判断，没有d==0
+	neighbors = new Neighbors3[d+1];//声明时要多声明一组，因为初始深度为0。应该是这样，上面对d<0情况进行了判断，没有d==0
 }
 template< class NodeData >
 template< class Real >
@@ -1285,6 +1306,8 @@ template< class NodeData >
 template< class Real >
 typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::setNeighbors( OctNode< NodeData >* root , Point3D< Real > p , int d )
 {
+	//这里设置Neighbor的操作与Neighbor5非常相似，但是不明白为什么要加上一个数据点p作为输入参数
+	//每次找的角点都是离p最近的一个，其对应的child node才会被更新Neighbor，那么其他的没有遍历到是不是就不管了
 	if( !neighbors[d].neighbors[1][1][1] || !neighbors[d].neighbors[1][1][1]->isInside( p ) )//neighbor[1][1][1]实际上就是node本身吧
 	{
 		neighbors[d].clear();
@@ -1297,11 +1320,12 @@ typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::set
 			int i , j , k , x1 , y1 , z1 , x2 , y2 , z2;
 			Point3D< Real > c;
 			Real w;
-			temp.neighbors[1][1][1]->centerAndWidth( c , w );
-			int idx = CornerIndex( c , p );
+			temp.neighbors[1][1][1]->centerAndWidth( c , w );//也就是中心节点的center和width
+			int idx = CornerIndex( c , p );//得到距离p最近的角点的index
 			Cube::FactorCornerIndex(   idx    , x1 , y1 , z1 );
 			Cube::FactorCornerIndex( (~idx)&7 , x2 , y2 , z2 );
 
+			//为这个角点代表的child node设置Neighbor
 			if( !temp.neighbors[1][1][1]->children ) temp.neighbors[1][1][1]->initChildren();//细分到child node
 			for( i=0 ; i<2 ; i++ ) for( j=0 ; j<2 ; j++ ) for( k=0 ; k<2 ; k++ )
 				neighbors[d].neighbors[x2+i][y2+j][z2+k] = &temp.neighbors[1][1][1]->children[Cube::CornerIndex(i,j,k)];
@@ -1362,6 +1386,7 @@ template< class NodeData >
 template< class Real >
 typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::getNeighbors( OctNode< NodeData >* root , Point3D< Real > p , int d )
 {
+	//这个get函数除了没有initChild操作，以及多加了一些对child node存在性的判断之外，其他的与set完全相同，不明白其用意???
 	if( !neighbors[d].neighbors[1][1][1] || !neighbors[d].neighbors[1][1][1]->isInside( p ) )
 	{
 		neighbors[d].clear();
@@ -1422,7 +1447,8 @@ typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::get
 template< class NodeData >
 typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::setNeighbors( OctNode< NodeData >* node )
 {
-	int d = node->depth();//貌似只是单层的neighbor设置
+	//内部也进行迭代，对node的深度之上的所有Neighbor进行了设置，但设定的Neighbor只与当前node相关吧
+	int d = node->depth();
 	if( node==neighbors[d].neighbors[1][1][1] )
 	{
 		bool reset = false;
@@ -1498,7 +1524,7 @@ typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::set
 template< class NodeData >
 typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::setNeighbors( OctNode< NodeData >* node , bool flags[3][3][3] )
 {
-	//针对于那种限定depth的neighbor node设置，这里多加了flag判断
+	//与上面的函数类似，只是假如了flags作为标志位
 	int d = node->depth();
 	if( node==neighbors[d].neighbors[1][1][1] )
 	{
@@ -1593,6 +1619,7 @@ typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::set
 template< class NodeData >
 typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::getNeighbors( OctNode< NodeData >* node )
 {
+	//相较于setNeighbor函数，也是多加入了对childnode的判断
 	int d=node->depth();
 	if(node!=neighbors[d].neighbors[1][1][1])
 	{
@@ -1643,7 +1670,7 @@ typename OctNode< NodeData >::Neighbors3& OctNode< NodeData >::NeighborKey3::get
 template< class NodeData >
 void OctNode< NodeData >::NeighborKey3::setNeighbors( OctNode< NodeData >* node , typename OctNode< NodeData >::Neighbors5& neighbors )
 {
-	//neighbor5属于二环邻域的neighbor node
+	//利用一环邻域Neighbor来设置二环邻域Neighbor???
 	neighbors.clear();
 	if( !node ) return;
 	if( !node->parent ) neighbors.neighbors[2][2][2] = node;
@@ -2104,19 +2131,20 @@ typename OctNode< NodeData >::Neighbors5& OctNode< NodeData >::NeighborKey5::get
 	int d=node->depth();
 	if( node!=neighbors[d].neighbors[2][2][2] )
 	{
+		//这算是getNeighbors?如果要重新设置neighbors的值，应该算是setNeighbors
 		neighbors[d].clear();
 
 		if( !node->parent ) neighbors[d].neighbors[2][2][2]=node;
 		else
 		{
 			getNeighbors( node->parent );
-			Neighbors5& temp = neighbors[d-1];
+			Neighbors5& temp = neighbors[d-1];//父节点的Neighbor
 			int x1 , y1 , z1 , x2 , y2 , z2;
 			int idx = int( node - node->parent->children );
-			Cube::FactorCornerIndex( idx , x1 , y1 , z1 );
+			Cube::FactorCornerIndex( idx , x1 , y1 , z1 );//找出当前node在parent node的child中的具体排位
 
-			Neighbors5& n = neighbors[d];
-			Cube::FactorCornerIndex( (~idx)&7 , x2 , y2 , z2 );
+			Neighbors5& n = neighbors[d];//当前节点的Neighbor
+			Cube::FactorCornerIndex( (~idx)&7 , x2 , y2 , z2 );//(~idx)&7效果应该等同于(7-idx)
 			int i , j , k;
 			int fx0 = x2+1 , fy0 = y2+1 , fz0 = z2+1;	// Indices of the bottom left corner of the parent within the 5x5x5
 			int cx1 = x1*2+1 , cy1 = y1*2+1 , cz1 = z1*2+1;
@@ -2128,7 +2156,10 @@ typename OctNode< NodeData >::Neighbors5& OctNode< NodeData >::NeighborKey5::get
 			for( i=0 ; i<2 ; i++ ) for( j=0 ; j<2 ; j++ ) for( k=0 ; k<2 ; k++ )
 				n.neighbors[fx0+i][fy0+j][fz0+k] = node->parent->children + Cube::CornerIndex( i , j , k );
 
+			//因为当前只设置二环邻域的Neighbor，因此只需要在父节点一环邻域的子节点中查找就可以满足要求
 			// Set the neighbors from across the faces
+			//across face意味着在parent层面，两个parent有一个相邻面，六个
+			//简单验证了一下，应该是对的
 			if( temp.neighbors[cx1][2][2] && temp.neighbors[cx1][2][2]->children )
 				for( i=0 ; i<2 ; i++ ) for( j=0 ; j<2 ; j++ ) for( k=0 ; k<2 ; k++ )
 					n.neighbors[fx1+i][fy0+j][fz0+k] = temp.neighbors[cx1][2][2]->children + Cube::CornerIndex( i , j , k );
@@ -2149,6 +2180,7 @@ typename OctNode< NodeData >::Neighbors5& OctNode< NodeData >::NeighborKey5::get
 					n.neighbors[fx0+i][fy0+j][fz2  ] = temp.neighbors[2][2][cz2]->children + Cube::CornerIndex( i , j , z1 );
 
 			// Set the neighbors from across the edges
+			//parent之间只有相邻边，12个???
 			if( temp.neighbors[cx1][cy1][2] && temp.neighbors[cx1][cy1][2]->children )
 				for( i=0 ; i<2 ; i++ ) for( j=0 ; j<2 ; j++ ) for( k=0 ; k<2 ; k++ )
 					n.neighbors[fx1+i][fy1+j][fz0+k] = temp.neighbors[cx1][cy1][2]->children + Cube::CornerIndex( i , j , k );
@@ -2187,6 +2219,7 @@ typename OctNode< NodeData >::Neighbors5& OctNode< NodeData >::NeighborKey5::get
 					n.neighbors[fx0+i][fy2  ][fz2  ] = temp.neighbors[2][cy2][cz2]->children + Cube::CornerIndex( i , y1 , z1 );
 
 			// Set the neighbor from across the corners
+			//parent之间只有相邻点，8个
 			if( temp.neighbors[cx1][cy1][cz1] && temp.neighbors[cx1][cy1][cz1]->children )
 				for( i=0 ; i<2 ; i++ ) for( j=0 ; j<2 ; j++ ) for( k=0 ; k<2 ; k++ )
 					n.neighbors[fx1+i][fy1+j][fz1+k] = temp.neighbors[cx1][cy1][cz1]->children + Cube::CornerIndex( i , j , k );
@@ -2217,28 +2250,28 @@ typename OctNode< NodeData >::Neighbors5& OctNode< NodeData >::NeighborKey5::get
 template< class NodeData >
 typename OctNode< NodeData >::Neighbors5& OctNode< NodeData >::NeighborKey5::setNeighbors( OctNode* node , int xStart , int xEnd , int yStart , int yEnd , int zStart , int zEnd )
 {
-	int d=node->depth();
-	if( node!=neighbors[d].neighbors[2][2][2] )
+	int d=node->depth();//先确定当前node在octree的哪一层
+	if( node!=neighbors[d].neighbors[2][2][2] )//为什么感觉Neighbor5与当前参数node没有明显的从属关系，否则为什么要先在此进行判断
 	{
 		neighbors[d].clear();
 
-		if( !node->parent ) neighbors[d].neighbors[2][2][2] = node;
+		if( !node->parent ) neighbors[d].neighbors[2][2][2] = node;//如果是根结点，那么直接把位置(2,2,2)指定为根结点
 		else
 		{
 			setNeighbors( node->parent , xStart , xEnd , yStart , yEnd , zStart , zEnd );
 			Neighbors5& temp = neighbors[d-1];
 			int x1 , y1 , z1 , x2 , y2 , z2 , ii , jj , kk;
-			int idx = int( node-node->parent->children );
-			Cube::FactorCornerIndex( idx , x1 , y1 , z1 );
+			int idx = int( node-node->parent->children );//得到当前node在其parent的所有child中的index偏移
+			Cube::FactorCornerIndex( idx , x1 , y1 , z1 );//利用index计算出当前node在parent划分中属于八块中的哪一块
 
-			for( int i=xStart ; i<xEnd ; i++ )
+			for( int i=xStart ; i<xEnd ; i++ )//简单推算了一下，xStart(yStart, zStart)的取值可能为0，xEnd(yEnd, zEnd)的取值可能为5
 			{
 				x2 = i+x1;
-				ii = x2&1;
-				x2 = 1+(x2>>1);
+				ii = x2&1;//保留x2最低位
+				x2 = 1+(x2>>1);//经推算
 				for( int j=yStart ; j<yEnd ; j++ )
 				{
-					y2 = j+y1;
+					y2 = j+y1;//y2同理，同x2一样，为什么要强行更改最低位
 					jj = y2&1;
 					y2 = 1+(y2>>1);
 					for( int k=zStart ; k<zEnd ; k++ )
@@ -2250,6 +2283,9 @@ typename OctNode< NodeData >::Neighbors5& OctNode< NodeData >::NeighborKey5::set
 						{
 							if( !temp.neighbors[x2][y2][z2]->children ) temp.neighbors[x2][y2][z2]->initChildren();
 							neighbors[d].neighbors[i][j][k] = temp.neighbors[x2][y2][z2]->children + Cube::CornerIndex(ii,jj,kk);
+							//这里不但涉及了当前node的子节点，还包括了当前node的neighbor的子节点
+							//这里还涉及一个问题，就是所有的node都是有序编号的吗?那么不同depth之间的序号是怎么实现的，深度优先还是宽度优先???
+							//Neighbor node是属于同一个depth之间的关系
 						}
 					}
 				}
@@ -2311,7 +2347,7 @@ int OctNode< NodeData >::write(const char* fileName) const{
 }
 template< class NodeData >
 int OctNode< NodeData >::write(FILE* fp) const{
-	fwrite(this,sizeof(OctNode< NodeData >),1,fp);
+	fwrite(this,sizeof(OctNode< NodeData >),1,fp);//这写进去的是指针???
 	if(children){for(int i=0;i<Cube::CORNERS;i++){children[i].write(fp);}}
 	return 1;
 }
@@ -2325,7 +2361,7 @@ int OctNode< NodeData >::read(const char* fileName){
 }
 template< class NodeData >
 int OctNode< NodeData >::read(FILE* fp){
-	fread(this,sizeof(OctNode< NodeData >),1,fp);
+	fread(this,sizeof(OctNode< NodeData >),1,fp);//不太明白读出来的是什么信息
 	parent=NULL;
 	if(children){
 		children=NULL;
@@ -2339,13 +2375,14 @@ int OctNode< NodeData >::read(FILE* fp){
 }
 template< class NodeData >
 int OctNode< NodeData >::width(int maxDepth) const {
-	int d=depth();
-	return 1<<(maxDepth-d); 
+	int d=depth();//返回当前节点的深度
+	return 1<<(maxDepth-d); //但是这个width所代表的意义是???代表当前节点包含的最大深度时的子节点个数???
 }
 template< class NodeData >
 void OctNode< NodeData >::centerIndex(int maxDepth,int index[DIMENSION]) const
 {
+	//具体意思还不清楚，后面再看
 	int d,o[3];
-	depthAndOffset(d,o);
+	depthAndOffset(d,o);//当前的深度和offset
 	for(int i=0;i<DIMENSION;i++) index[i]=BinaryNode::CornerIndex( maxDepth , d+1 , o[i]<<1 , 1 );
 }

@@ -53,10 +53,17 @@ class Cube{
 public:
 	const static unsigned int CORNERS=8 , EDGES=12 , FACES=6;
 
+	//x|y|z就是二进制编码，从000到111刚好可以代表八个角点
+	//返回角点index
 	static int  CornerIndex			( int x , int y , int z );
+	//根据角点index得到x|y|z的值
 	static void FactorCornerIndex	( int idx , int& x , int& y , int& z );
+	//根据分析，orientation应该是代表xyz三个方向，因此取值为00,01,10，而i，j则代表在具体orientation上的二进制编码，刚好代表12个边
+	//返回边index
 	static int  EdgeIndex			( int orientation , int i , int j );
+	//根据边index返回orientation以及i，j的值
 	static void FactorEdgeIndex		( int idx , int& orientation , int& i , int &j);
+	//猜测，dir应该代表xyz三个坐标轴方向，取值00到10，offset区分正负，表示为0或者1
 	static int  FaceIndex			( int dir , int offSet );
 	static int  FaceIndex			( int x , int y , int z );
 	static void FactorFaceIndex		( int idx , int& x , int &y , int& z );
