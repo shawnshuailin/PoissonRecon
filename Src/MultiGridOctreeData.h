@@ -119,20 +119,25 @@ public:
 	static long long CornerIndexKey( const int index[DIMENSION] );
 };
 
-class SortedTreeNodes
+class SortedTreeNodes//不太明白为什么要sort
 {
 	typedef OctNode< TreeNodeData > TreeOctNode;
 protected:
 	void _sortByZCoordinate( void );
 public:
 	Pointer( TreeOctNode* ) treeNodes;
+	//nodeCount是一个分层记录，一维数组的维度等于maxDepth+1，每一个值代表了tree node在当前层index的初始值
+	//通过nodeCount[d+1]-nodeCount[d]来确定第d层的node数目
 	int *nodeCount;
-	int maxDepth;
+	int maxDepth;//树的最大深度???
 	SortedTreeNodes( void );
 	~SortedTreeNodes( void );
 	void set( TreeOctNode& root , std::vector< int >* map );
+	//感觉是这个二维数组，每一depth的nodeCount的初始值都存在nodeCount中，sliceOffset的第一维也是按照depth来分别存储
+	//第二维则保存了当前depth下所有slice的offset值
 	Pointer( Pointer( int ) ) sliceOffsets;
-	static int Slices( int depth );
+	static int Slices( int depth );//返回每一层的slice数目
+	//sliceSpan就是指当前层(depth)的当前node(off)在层数为d时所包含的所有slice的index范围
 	std::pair< int , int > sliceSpan( int depth , int off , int d ) const;
 
 	template< int Indices >
@@ -143,9 +148,9 @@ public:
 		int& operator[] ( int i ) { return idx[i]; }
 		const int& operator[] ( int i ) const { return idx[i]; }
 	};
-	typedef _Indices< Square::CORNERS > SquareCornerIndices;
-	typedef _Indices< Square::EDGES > SquareEdgeIndices;
-	typedef _Indices< Square::FACES > SquareFaceIndices;
+	typedef _Indices< Square::CORNERS > SquareCornerIndices;//index数组，单独用一个struct来存储，这是二维square模式下的corner index
+	typedef _Indices< Square::EDGES > SquareEdgeIndices;//二维square模式下的edge index
+	typedef _Indices< Square::FACES > SquareFaceIndices;//二维square模式下的face index
 
 	struct SliceTableData
 	{
@@ -226,23 +231,23 @@ public:
 		PointData( Point3D< Real > p=Point3D< Real >() , Real w=0 ) { position = p , weight = w , weightedCoarserDValue = Real(0); }
 	};
 	template< class Data >
-	struct SparseNodeData
-	{
-		std::vector< int > indices;//感觉indices充当了映射表的功能
+	struct SparseNodeData//会不会是最后scalar function求解时用到了，因为是adaptive的，所以会形成SparseNode???
+	{//sparseNodeData只是一个通用容器，可以装认可Data类型的值，包括PointData，或者是Point3D的normalInfo或者是color等
+		std::vector< int > indices;//感觉indices充当了映射表的功能，给定node Index，可以映射得到该node在data中数据的存储位置Index
 		std::vector< Data > data;
 		int index( const TreeOctNode* node ) const { return node->nodeData.nodeIndex>=(int)indices.size() ? -1 : indices[ node->nodeData.nodeIndex ]; }
 	};
 protected:
-	SortedTreeNodes _sNodes;
+	SortedTreeNodes _sNodes;//疑问，为什么非得是Sorted
 	int _splatDepth;
 	int _minDepth;
-	int _fullDepth;
-	bool _constrainValues;
+	int _fullDepth;//包含有full child的octree的深度
+	bool _constrainValues;//应该是screened point的weight
 	int _boundaryType;
 	Real _scale;
 	Point3D< Real > _center;
 	std::vector< int > _pointCount;
-	BSplineData< 2 > _fData;
+	BSplineData< 2 > _fData;//不明白为什么是degree=2
 
 	bool _InBounds( Point3D< Real > ) const;
 

@@ -553,7 +553,7 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 	if     ( _boundaryType<0 ) _boundaryType = -1;//看样子boundaryType有三种不同状态
 	else if( _boundaryType>0 ) _boundaryType =  1;
 	_splatDepth = splatDepth;//后面splat的时候会用到
-	_constrainValues = (constraintWeight>0);
+	_constrainValues = (constraintWeight>0);//表征是否需要用原点云中数据点作为固定约束点
 
 	XForm3x3< Real > xFormN;
 	for( int i=0 ; i<3 ; i++ ) for( int j=0 ; j<3 ; j++ ) xFormN(i,j) = xForm(i,j);//应该只是旋转部分
@@ -2152,7 +2152,7 @@ Pointer( Real ) Octree< Real >::SolveSystem( SparseNodeData< PointData >& pointI
 	iters = std::max< int >( 0 , iters );
 	if( _boundaryType==0 ) maxSolveDepth++ , cgDepth++;
 
-	Pointer( Real ) solution = AllocPointer< Real >( _sNodes.nodeCount[_sNodes.maxDepth] );
+	Pointer( Real ) solution = AllocPointer< Real >( _sNodes.nodeCount[_sNodes.maxDepth] );//看来sortedOctreeNode很重要
 	memset( solution , 0 , sizeof(Real)*_sNodes.nodeCount[_sNodes.maxDepth] );
 
 	solution[0] = 0;

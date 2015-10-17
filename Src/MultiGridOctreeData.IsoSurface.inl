@@ -185,7 +185,7 @@ void Octree< Real >::GetMCIsoSurface( ConstPointer( Real ) kernelDensityWeights 
 	// Iterate over the slices at the finest level
 	for( int slice=0 ; slice<(1<<maxDepth) ; slice++ )
 	{
-		// Process at all depths that that contain this slice
+		// Process at all depths that contain this slice
 		for( int d=maxDepth , o=slice+1 ; d>=_minDepth ; d-- , o>>=1 )
 		{
 			// Copy edges from finer (required to ensure we correctly track edge cancellations)

@@ -40,7 +40,7 @@ template< class NodeData >
 class OctNode
 {
 private:
-	static int UseAlloc;
+	static int UseAlloc;//只有一个副本
 	unsigned long long _depthAndOffset;//在OctNode中，把当前节点的depth和offset存在一个变量中，用特定的偏移位来区分
 	//虽然不明白为什么要这么做，难道是为了节省变量
 
@@ -71,7 +71,7 @@ private:
 
 	// This is made private because the division by two has been pulled out.
 	//暂时不太清楚下面两个函数的作用???
-	static inline int Overlap(int c1,int c2,int c3,int dWidth);
+	static inline int Overlap(int c1,int c2,int c3,int dWidth);//static可以通过类名来调用
 	inline static int ChildOverlap(int dx,int dy,int dz,int d,int cRadius2);
 
 	const OctNode* __faceNeighbor(int dir,int off) const;

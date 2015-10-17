@@ -349,7 +349,7 @@ int Execute( int argc , char* argv[] )
 	OctNode< TreeNodeData >::SetAllocator( MEMORY_ALLOCATOR_BLOCK_SIZE );
 
 	t=Time();
-	int kernelDepth = KernelDepth.set ?  KernelDepth.value : Depth.value-2;//这个kernel是什么kernel
+	int kernelDepth = KernelDepth.set ?  KernelDepth.value : Depth.value-2;//这个kernel是什么kernel，难道是box Filter
 	if( kernelDepth>Depth.value )
 	{
 		fprintf( stderr,"[ERROR] %s can't be greater than %s: %d <= %d\n" , KernelDepth.name , Depth.name , KernelDepth.value , Depth.value );
@@ -363,14 +363,16 @@ int Execute( int argc , char* argv[] )
 	//sparseNodeData应该指的是单步求解中的矩阵A，是由basis function梯度的乘积的积分组成
 	typename Octree< Real >::template SparseNodeData< typename Octree< Real >::PointData >* pointInfo = new typename Octree< Real >::template SparseNodeData< typename Octree< Real >::PointData >();
 	typename Octree< Real >::template SparseNodeData< Point3D< Real > >* normalInfo = new typename Octree< Real >::template SparseNodeData< Point3D< Real > >();//法向，应该是两个输入数据，位置和法向
-	//两种weight，也不清楚用处
-	std::vector< Real >* kernelDensityWeights = new std::vector< Real >();
+	//kernelDensityWeights--Enabling this flag tells the reconstructor to output the estimated depth values of 	the isosurface vertices.
+	std::vector< Real >* kernelDensityWeights = new std::vector< Real >();//后面resize的用法，经查证，只是在新增的位置设定为0，已有位置的值不变
+	//centerWeights是用来修改等值面提取时isoValue的值，因此最后的isoValue可能是加权平均而不是normal average
 	std::vector< Real >* centerWeights = new std::vector< Real >();
 	int pointCount;
 	typedef typename Octree< Real >::template ProjectiveData< Point3D< Real > > ProjectiveColor;//同上，typename还是用来定义类型的
 	typename Octree< Real >::template SparseNodeData< ProjectiveColor > colorData;//貌似是第三种输入数据，vertex上的color信息
 
 	char* ext = GetFileExtension( In.value );
+	//下面先建立Octree结构，根据point位置建立adaptive Octree
 	if( Color.set && Color.value>0 )
 	{
 		OrientedPointStreamWithData< float , Point3D< unsigned char > >* pointStream;
@@ -395,7 +397,9 @@ int Execute( int argc , char* argv[] )
 		//设置Octree用于重建，参数中包括了很多输入时给定的参数
 		//kernel depth在函数中对应于splatting depth，研究一下有什么用处
 		//samplesPerNode应该是在多个point被划分到同一个node的时候sample的多少
-		pointCount = tree.template SetTree< float >( pointStream , MinDepth.value , Depth.value , FullDepth.value , kernelDepth , Real(SamplesPerNode.value) , Scale.value , Confidence.set , NormalWeights.set , PointWeight.value , AdaptiveExponent.value , *kernelDensityWeights , *pointInfo , *normalInfo , *centerWeights , xForm , BoundaryType.value , Complete.set );
+		pointCount = tree.template SetTree< float >( pointStream , MinDepth.value , Depth.value , FullDepth.value , kernelDepth , 
+			Real(SamplesPerNode.value) , Scale.value , Confidence.set , NormalWeights.set , PointWeight.value , AdaptiveExponent.value , 
+			*kernelDensityWeights , *pointInfo , *normalInfo , *centerWeights , xForm , BoundaryType.value , Complete.set );
 		delete pointStream;
 	}
 	delete[] ext;
@@ -408,6 +412,7 @@ int Execute( int argc , char* argv[] )
 
 	maxMemoryUsage = tree.maxMemoryUsage;
 	t=Time() , tree.maxMemoryUsage=0;
+	//设定laplacian constraint
 	Pointer( Real ) constraints = tree.SetLaplacianConstraints( *normalInfo );
 	delete normalInfo;
 	DumpOutput2( comments , "#      Constraints set in: %9.1f (s), %9.1f (MB)\n" , Time()-t , tree.maxMemoryUsage );
@@ -415,6 +420,7 @@ int Execute( int argc , char* argv[] )
 	maxMemoryUsage = std::max< double >( maxMemoryUsage , tree.maxMemoryUsage );
 
 	t=Time() , tree.maxMemoryUsage=0;
+	//求解方程
 	Pointer( Real ) solution = tree.SolveSystem( *pointInfo , constraints , ShowResidual.set , Iters.value , MaxSolveDepth.value , CGDepth.value , CSSolverAccuracy.value );
 	delete pointInfo;
 	FreePointer( constraints );
@@ -427,6 +433,7 @@ int Execute( int argc , char* argv[] )
 
 	if( Verbose.set ) tree.maxMemoryUsage=0;
 	t=Time();
+	//提取等值面的值，有可能是带权重累加的值
 	isoValue = tree.GetIsoValue( solution , *centerWeights );
 	delete centerWeights;
 	DumpOutput( "Got average in: %f\n" , Time()-t );
@@ -459,6 +466,7 @@ int Execute( int argc , char* argv[] )
 	if( Out.set )
 	{
 		t = Time() , tree.maxMemoryUsage = 0;
+		//提取surface
 		tree.GetMCIsoSurface( kernelDensityWeights ? GetPointer( *kernelDensityWeights ) : NullPointer( Real ) , Color.set ? &colorData : NULL , solution , isoValue , mesh , true , !NonManifold.set , PolygonMesh.set );
 		if( PolygonMesh.set ) DumpOutput2( comments , "#         Got polygons in: %9.1f (s), %9.1f (MB)\n" , Time()-t , tree.maxMemoryUsage );
 		else                  DumpOutput2( comments , "#        Got triangles in: %9.1f (s), %9.1f (MB)\n" , Time()-t , tree.maxMemoryUsage );
@@ -467,6 +475,7 @@ int Execute( int argc , char* argv[] )
 
 		if( NoComments.set )
 		{
+			//写入文件
 			if( ASCII.set ) PlyWritePolygons( Out.value , &mesh , PLY_ASCII         , NULL , 0 , iXForm );
 			else            PlyWritePolygons( Out.value , &mesh , PLY_BINARY_NATIVE , NULL , 0 , iXForm );
 		}

@@ -34,7 +34,7 @@ SortedTreeNodes::SortedTreeNodes( void )
 	nodeCount = NULL;
 	treeNodes = NullPointer( TreeOctNode* );
 	maxDepth = 0;
-	sliceOffsets = NullPointer( Pointer( int ) );
+	sliceOffsets = NullPointer( Pointer( int ) );//外面是NULL，里面为什么还要指定类型
 }
 SortedTreeNodes::~SortedTreeNodes( void )
 {
@@ -48,6 +48,7 @@ SortedTreeNodes::~SortedTreeNodes( void )
 }
 void SortedTreeNodes::set( TreeOctNode& root , std::vector< int >* map )
 {
+	//下面几行销毁旧数据
 	if( nodeCount ) delete[] nodeCount;
 	if( treeNodes ) DeletePointer( treeNodes );
 	if( sliceOffsets )
@@ -55,64 +56,73 @@ void SortedTreeNodes::set( TreeOctNode& root , std::vector< int >* map )
 		for( int d=0 ; d<maxDepth ; d++ ) FreePointer( sliceOffsets[d] );
 		FreePointer( sliceOffsets );
 	}
-	maxDepth = root.maxDepth()+1;
-	nodeCount = new int[ maxDepth+1 ];
+	//赋值新数据
+	maxDepth = root.maxDepth()+1;//octNode的函数调用，返回的深度是树的深度，
+	//maxDepth与当前记录数据的维度关联，因此要加1，否则当只有根节点时maxDepth会等于0
+	nodeCount = new int[ maxDepth+1 ];//这里再加1是因为要通过nodeCount[d+1]-nodeCount[d]来确定第d层的node数目
 	treeNodes = NewPointer< TreeOctNode* >( root.nodes() );
 
 	int startDepth = 0;
-	nodeCount[0] = 0 , nodeCount[1] = 1;
+	nodeCount[0] = 0 , nodeCount[1] = 1;//为什么一定有depth=1这一层???
 	treeNodes[0] = &root;
 	for( int d=startDepth+1 ; d<maxDepth ; d++ )
 	{
-		nodeCount[d+1] = nodeCount[d];
+		nodeCount[d+1] = nodeCount[d];//先照搬上一层的nodeCount，然后根据d-1层子节点的情况来确定本层会出现多少个node
+		//那么本层出现的node个数需要通过nodeCount[d+1]-nodeCount[d]来确定
 		for( int i=nodeCount[d-1] ; i<nodeCount[d] ; i++ )
 		{
 			TreeOctNode* temp = treeNodes[i];
-			if( temp->children ) for( int c=0 ; c<8 ; c++ ) treeNodes[ nodeCount[d+1]++ ] = temp->children + c;
+			//也就是说temp不一定有子节点，有子节点的情况下才会记录在nodeCount中
+			if( temp->children ) for( int c=0 ; c<8 ; c++ ) treeNodes[ nodeCount[d+1]++ ] = temp->children + c;//记录nodeCount的同时赋值node指针
 		}
 	}
 	_sortByZCoordinate();
 	if( map )
 	{
 		map->resize( nodeCount[maxDepth] );
+		//做一个反向索引，看来nodeIndex会大于nodeCount的实际值，因为树并不是一个完全八叉树，有些节点没有被细分
 		for( int i=0 ; i<nodeCount[maxDepth] ; i++ ) (*map)[i] = treeNodes[i]->nodeData.nodeIndex;
 	}
-	for( int i=0 ; i<nodeCount[maxDepth] ; i++ ) treeNodes[i]->nodeData.nodeIndex = i;
+	for( int i=0 ; i<nodeCount[maxDepth] ; i++ ) treeNodes[i]->nodeData.nodeIndex = i;//这块nodeIndex为什么又被改写了，那上面的map是怎么回事???
 }
 int SortedTreeNodes::Slices( int depth ){ return 1<<depth; }
 std::pair< int , int > SortedTreeNodes::sliceSpan( int depth , int off , int d ) const
 {
 	int dd = d-depth;
+	//每一depth的nodeCount的初始值都存在nodeCount中，sliceOffset的第一维也是按照depth来分别存储
+	//第二维则保存了当前depth下所有slice的offset值
+	//上面是根据代码猜测的，那么sliceSpan就是指当前层(depth)的当前node(off)在层数为d时所包含的所有slice的index范围
+	//下面pair中存储的值就是这个范围，pair的第二个值是一个上限，应该不在slice的范围内
 	return std::pair< int , int >( nodeCount[d] + sliceOffsets[d][off<<dd] , nodeCount[d] + sliceOffsets[d][(off+1)<<dd] );
 }
 void SortedTreeNodes::_sortByZCoordinate( void )
 {
-	sliceOffsets = AllocPointer< Pointer( int ) >( maxDepth );
+	sliceOffsets = AllocPointer< Pointer( int ) >( maxDepth );//分配了maxDepth个一维数组
 	for( int d=0 ; d<maxDepth ;  d++ )
 	{
-		int slices = Slices( d );
-		sliceOffsets[d] = AllocPointer< int >( slices+1 );
+		int slices = Slices( d );//返回当前层slice的数目
+		sliceOffsets[d] = AllocPointer< int >( slices+1 );//声明一维数组，但是多了一个
 		memset( sliceOffsets[d] , 0 , sizeof(int)*(slices+1) );
-		for( int i=nodeCount[d] ; i<nodeCount[d+1] ; i++ )
+		for( int i=nodeCount[d] ; i<nodeCount[d+1] ; i++ )//nodeCount记录了本层的Index起始和终止的值
 		{
 			int _d , _off[3];
-			treeNodes[i]->depthAndOffset( _d , _off );
-			sliceOffsets[d][ _off[2] ]++;
+			treeNodes[i]->depthAndOffset( _d , _off );//获取node的depth和offset
+			sliceOffsets[d][ _off[2] ]++;//根据z轴(_off[2])的offset找出sliceoffset
 		}
-		for( int i=1 ; i<slices ; i++ ) sliceOffsets[d][i] += sliceOffsets[d][i-1];
+		for( int i=1 ; i<slices ; i++ ) sliceOffsets[d][i] += sliceOffsets[d][i-1];//累加前面所有存在的项，这是???
 		for( int i=slices ; i>=1 ; i-- ) sliceOffsets[d][i] = sliceOffsets[d][i-1];
 		sliceOffsets[d][0] = 0;
 	}
-	for( TreeOctNode* node=treeNodes[0]->nextNode() ; node ; node=treeNodes[0]->nextNode( node ) )
+	for( TreeOctNode* node=treeNodes[0]->nextNode() ; node ; node=treeNodes[0]->nextNode( node ) )//访问每一个node
 	{
 		int d , off[3];
-		node->depthAndOffset( d , off );
+		node->depthAndOffset( d , off );//得到node的depth和offset
 		treeNodes[ nodeCount[d] + sliceOffsets[d][ off[2] ] ] = node;
 		sliceOffsets[d][ off[2] ]++;
 	}
 	for( int d=0 ; d<maxDepth ; d++ )
 	{
-		for( int i=Slices(d) ; i>=1 ; i-- ) sliceOffsets[d][i] = sliceOffsets[d][i-1];
+		for( int i=Slices(d) ; i>=1 ; i-- ) sliceOffsets[d][i] = sliceOffsets[d][i-1];//反复的赋值是什么意思
 		sliceOffsets[d][0] = 0;
 	}
 }
