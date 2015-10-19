@@ -42,7 +42,7 @@ public:
 	StartingPolynomial<Degree+Degree2>  operator * (const StartingPolynomial<Degree2>& p) const;//多项式相乘
 	StartingPolynomial scale(double s) const;//参数缩放
 	StartingPolynomial shift(double t) const;//参数平移
-	int operator < (const StartingPolynomial& sp) const;//啥玩意，比较大小只比较start，没太看懂用法
+	int operator < (const StartingPolynomial& sp) const;//比较大小只比较start，没太看懂用法
 	static int Compare(const void* v1,const void* v2);//小于符号和这里的compare函数都是在container中对StartingPolynomial对象进行排序时需要的弱排序比较
 };
 

@@ -199,7 +199,7 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 	//BSplineComponents没有指明自变量空间
 
 	baseFunction = PPolynomial< Degree >::BSpline();//Degree等于2的BSpline，作为平滑方程，经过推导，应该就是box Filter进行三次卷积后形成的平滑方程
-	for( int i=0 ; i<=Degree ; i++ ) baseBSpline[i] = Polynomial< Degree >::BSplineComponent( i ).shift( double(-(Degree+1)/2) + i - 0.5 );//为什么shift这么多???没看懂
+	for( int i=0 ; i<=Degree ; i++ ) baseBSpline[i] = Polynomial< Degree >::BSplineComponent( i ).shift( double(-(Degree+1)/2) + i - 0.5 );//为什么shift这么多???分别是-1.5，-0.5，0.5
 	dBaseFunction = baseFunction.derivative();//basefunction的导数
 	StartingPolynomial< Degree > sPolys[Degree+4];
 
@@ -244,17 +244,18 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 	for( size_t i=0 ; i<functionCount ; i++ )
 	{
 		BinaryNode::CenterAndWidth( int(i) , c , w );//找出center和width
-		baseFunctions[i] = baseFunction.scale(w).shift(c);//base function，width是w，center是c，把平滑函数移动到相应的center点的位置，但宽度也不一样???
+		//下面这两种属于正常情况下的baseFunction和baseSpline
+		baseFunctions[i] = baseFunction.scale(w).shift(c);//base function，width是w，center是c，对基函数进行缩放和平移，这里相当于把平滑方程平移到每一个中心点位置，且平滑尺度大小不一
 		baseBSplines[i] = baseBSpline.scale(w).shift(c);//base BSpline function也一样
-		if( _boundaryType )//if(-1)是返回true还是false???
+		if( _boundaryType )//if(-1)是返回true
 		{
 			//这里应该是对边界情况单独进行处理，off=r-1，而且r=1<<d，那么r-1就是深度为d下的最后一个node
 			int d , off , r;
 			BinaryNode::DepthAndOffset( int(i) , d , off );//找出划分深度和在同一深度下的offset
 			r = 1<<d;
-			if     ( off==0 && off==r-1 ) baseFunctions[i] = leftRightBaseFunction.scale(w).shift(c);//那是不是意味着r=1，d=0
-			else if( off==0             ) baseFunctions[i] =      leftBaseFunction.scale(w).shift(c);//最左边
-			else if(           off==r-1 ) baseFunctions[i] =     rightBaseFunction.scale(w).shift(c);//最右边
+			if     ( off==0 && off==r-1 ) baseFunctions[i] = leftRightBaseFunction.scale(w).shift(c);//那是不是意味着r=1，d=0，leftright是用在这种情况下的
+			else if( off==0             ) baseFunctions[i] =      leftBaseFunction.scale(w).shift(c);//最左边，只有leftBase
+			else if(           off==r-1 ) baseFunctions[i] =     rightBaseFunction.scale(w).shift(c);//最右边，只有rightBase
 			if     ( off==0 && off==r-1 ) baseBSplines [i] = leftRightBSpline.scale(w).shift(c);//同上???
 			else if( off==0             ) baseBSplines [i] =      leftBSpline.scale(w).shift(c);
 			else if(           off==r-1 ) baseBSplines [i] =     rightBSpline.scale(w).shift(c);
