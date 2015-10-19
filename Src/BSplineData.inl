@@ -193,8 +193,8 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 	//难道在binaryNode的每个维度上都构建了functionCount个baseFunction
 	functionCount = BinaryNode::CumulativeCenterCount( depth );//binary node是octree在每个单一维度上的简化情况，而function count是累积的???
 	sampleCount   = BinaryNode::CenterCount( depth ) + BinaryNode::CornerCount( depth );//B样条曲线的可采样点就是这些center加上corner，这些点有vertex value吧
-	baseFunctions = NewPointer< PPolynomial< Degree > >( functionCount );//base function，预分配空间，PPolynomial本身就表示多个多项式的叠加，现在相当于二次叠加
-	//多项式幂次最高为2，那么拟合就需要两段曲线，三个控制点，这个更像是box Filter用来进行scalar function平滑的
+	baseFunctions = NewPointer< PPolynomial< Degree > >( functionCount );//base function，预分配空间，PPolynomial本身就表示多个多项式的叠加
+	//这里的空间应该分配给了每一个center节点，每个节点都是下面baseFunction计算出的结果
 	baseBSplines = NewPointer< BSplineComponents >( functionCount );//预分配空间，BSplineComponents与PPolynomial有啥区别
 	//BSplineComponents没有指明自变量空间
 
@@ -244,7 +244,7 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 	for( size_t i=0 ; i<functionCount ; i++ )
 	{
 		BinaryNode::CenterAndWidth( int(i) , c , w );//找出center和width
-		baseFunctions[i] = baseFunction.scale(w).shift(c);//base function，width是w，center是c，对基函数进行缩放和平移
+		baseFunctions[i] = baseFunction.scale(w).shift(c);//base function，width是w，center是c，把平滑函数移动到相应的center点的位置，但宽度也不一样???
 		baseBSplines[i] = baseBSpline.scale(w).shift(c);//base BSpline function也一样
 		if( _boundaryType )//if(-1)是返回true还是false???
 		{

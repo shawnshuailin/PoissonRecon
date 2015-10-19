@@ -500,7 +500,7 @@ template< class Real >
 int Octree< Real >::UpdateWeightContribution( std::vector< Real >& kernelDensityWeights , TreeOctNode* node , const Point3D<Real>& position , typename TreeOctNode::NeighborKey3& neighborKey , Real weight )
 {
 	typename TreeOctNode::Neighbors3& neighbors = neighborKey.setNeighbors( node );//设置了单层的一环邻域neighbor
-	if( (int)kernelDensityWeights.size()<TreeNodeData::NodeCount ) kernelDensityWeights.resize( TreeNodeData::NodeCount , 0 );//即使原来有weight，也被抹除了
+	if( (int)kernelDensityWeights.size()<TreeNodeData::NodeCount ) kernelDensityWeights.resize( TreeNodeData::NodeCount , 0 );//原来的weight保持不变，新分配的空间被初始化为0
 	double x , dxdy , dx[DIMENSION][3] , width;
 	Point3D< Real > center;
 	Real w;
@@ -527,7 +527,7 @@ int Octree< Real >::UpdateWeightContribution( std::vector< Real >& kernelDensity
 	{
 		dxdy = dx[0][i] * dx[1][j] * weight;//这个算是对neighbor node的weight影响吗???
 		TreeOctNode** _neighbors = neighbors.neighbors[i][j];
-		for( int k=0 ; k<3 ; k++ ) if( _neighbors[k] ) kernelDensityWeights[ _neighbors[k]->nodeData.nodeIndex ] += Real( dxdy * dx[2][k] );
+		for( int k=0 ; k<3 ; k++ ) if( _neighbors[k] ) kernelDensityWeights[ _neighbors[k]->nodeData.nodeIndex ] += Real( dxdy * dx[2][k] );//第三个轴的叠加作用在这里区分
 	}
 	return 0;
 }
@@ -651,8 +651,10 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 			int d=0;
 			while( d<splatDepth )//在splatDepth之前，这个点会被反复用于计算point density
 			{
+				//这里的weight在传递进函数后并不改变，它只是在函数执行前记录normal以及samplePerNode是否对当前计算kernelDensityWeight有影响
 				UpdateWeightContribution( kernelDensityWeights , temp , p , neighborKey , weight );//这里kernelDensityWeights貌似只是个指针，还没有内容
-				if( !temp->children ) temp->initChildren();//初始化child node
+				if( !temp->children ) temp->initChildren();//初始化child node，树的子节点初始化到了fullDepth这一次层，当splatDepth大于fullDepth时需要继续生成子节点
+				//但此时应该只要生成靠近P一侧的子节点的子树，而不是全部子节点都要生成
 				int cIndex=TreeOctNode::CornerIndex( myCenter , p );//判断出当前位置点p在哪一个child node上
 				temp = temp->children + cIndex;//移动指针到该child node
 				myWidth/=2;//细分，width要更新
@@ -668,7 +670,7 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 			cnt++;//
 		}
 	}
-	kernelDensityWeights.resize( TreeNodeData::NodeCount , 0 );//是被抹除了吗？
+	kernelDensityWeights.resize( TreeNodeData::NodeCount , 0 );//新分配的空间被初始化为0，其他的不变
 
 	std::vector< PointData >& points = pointInfo.data;
 
