@@ -226,7 +226,7 @@ public:
 	struct PointData
 	{
 		Point3D< Real > position;//位置
-		Real weightedCoarserDValue;//不知道干什么用的
+		Real weightedCoarserDValue;//应该是weightedCoarserDepth Value
 		Real weight;//权重，不知道有什么用
 		PointData( Point3D< Real > p=Point3D< Real >() , Real w=0 ) { position = p , weight = w , weightedCoarserDValue = Real(0); }
 	};
@@ -301,7 +301,7 @@ protected:
 	void UpdateConstraintsFromFiner( const typename BSplineData< 2 >::Integrator& integrator , int depth , const SortedTreeNodes& sNodes , ConstPointer( Real ) fineSolution , Pointer( Real ) coarseConstraints ) const;
 	// Evaluate the points @(depth) using coefficients @(depth-1)
 	void SetPointValuesFromCoarser( SparseNodeData< PointData >& pointInfo , int depth , const SortedTreeNodes& sNodes , ConstPointer( Real ) coarseCoefficients );
-	// Evalutes the solution @(depth) at the points @(depth-1) and updates the met constraints @(depth-1)
+	// Evaluates the solution @(depth) at the points @(depth-1) and updates the met constraints @(depth-1)
 	void SetPointConstraintsFromFiner ( const SparseNodeData< PointData >& pointInfo , int depth , const SortedTreeNodes& sNodes , ConstPointer( Real ) finerCoefficients , Pointer( Real ) metConstraints ) const;
 	Real _CoarserFunctionValue( const PointData& pointData , const typename TreeOctNode::NeighborKey3& neighborKey3 , const TreeOctNode* node , ConstPointer( Real ) coarseCoefficients ) const;
 	Real _FinerFunctionValue  ( const PointData& pointData , const typename TreeOctNode::NeighborKey3& neighborKey3 , const TreeOctNode* node , ConstPointer( Real )  finerCoefficients ) const;

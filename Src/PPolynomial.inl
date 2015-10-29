@@ -374,6 +374,7 @@ void PPolynomial<Degree>::printnl(void) const{
 template< >
 PPolynomial< 0 > PPolynomial< 0 >::BSpline( double radius )//ÔõÃ´±£Ö¤ÔÚDegreeµÈÓÚ0»áÓÅÏÈµ÷ÓÃÕâ¸öº¯Êı
 {
+	//Õâ¸öº¯ÊıÊ½Degree=0Ê±µÄboxFilter£¬ºóĞøDegree>0µÄsmoothing filterĞèÒªÍ¨¹ı²»¶Ïµ÷ÓÃMovingAverageº¯ÊıÀ´»ñµÃ£¬ÈçÏÂËùÊ¾
 	//Õâ¸öº¯Êı¸Ğ¾õ¾ÍÊÇ07ÎÄÕÂÖĞĞ´µÄbox Filter£¬ÔÚ|r|<0.5Ê±º¯ÊıÖµÎª1£¬ÆäËûµØ·½Îª0
 	PPolynomial q;
 	q.set(2);//Ê¹µÃpolyCountµÈÓÚ2
@@ -386,20 +387,20 @@ PPolynomial< 0 > PPolynomial< 0 >::BSpline( double radius )//ÔõÃ´±£Ö¤ÔÚDegreeµÈÓ
 	return q;
 }
 template< int Degree >
-PPolynomial< Degree > PPolynomial<Degree>::BSpline( double radius )//radiusÄ¬ÈÏÎª0.5
+PPolynomial< Degree > PPolynomial<Degree>::BSpline( double radius )//radiusÄ¬ÈÏÎª0.5£¬radiusÉè¶¨ÁËsmoothing filterÖĞµÄ°ë¾¶´óĞ¡
 {
 	return PPolynomial< Degree-1 >::BSpline().MovingAverage( radius );//BSpline²ÉÓÃÁËÄ¬ÈÏradius
 }
 template<int Degree>
-PPolynomial<Degree+1> PPolynomial<Degree>::MovingAverage( double radius ) const//¸Ğ¾õmovingaverage¾ÍÊÇ¶ÔµÍDegreeµÄBÑùÌõÇúÏß»ı·ÖµÃµ½Degree+1µÄÑùÌõ???
+PPolynomial<Degree+1> PPolynomial<Degree>::MovingAverage( double radius ) const//¾ÍÊÇ²´ËÉÖØ½¨ÖĞBoxFilterµÄ¾í»ı¹ı³Ì£¬Ã¿µ÷ÓÃÒ»´Î¾ÍÊÇ¾í»ıÒ»´Î
 {
 	PPolynomial<Degree+1> A;
 	Polynomial<Degree+1> p;
 	StartingPolynomial<Degree+1>* sps;
 
-	sps=(StartingPolynomial<Degree+1>*)malloc(sizeof(StartingPolynomial<Degree+1>)*polyCount*2);//Ö¸Êı¼¶Ôö³¤
+	sps=(StartingPolynomial<Degree+1>*)malloc(sizeof(StartingPolynomial<Degree+1>)*polyCount*2);//ÕâÀïµÄÊıÄ¿Ò²Ã»ÓĞÎÊÌâ
 
-	for(int i=0;i<int(polyCount);i++){//×î»ù±¾µÄBÑùÌõÇúÏßµÄ¶¨Òå£¬Í¨¹ı»ı·Ö¿ÉÒÔ´ÓDegreeµÄÑùÌõµÃµ½Degree+1µÄÑùÌõÇúÏß¶¨Òå
+	for(int i=0;i<int(polyCount);i++){//Í¨¹ıÓëµÚÒ»°æ²´ËÉÖØ½¨´úÂëµÄ±È½Ï£¬Õâ¸öº¯ÊıÓ¦¸ÃÊÇÓÃÀ´BoxFilterµÄ¾í»ı¹ı³Ì£¬¾í»ı½á¹ûÒÔStartingPolynomial±íÊ¾£¬ËùÒÔ²¢²»Ö±¹Û
 		sps[2*i  ].start=polys[i].start-radius;
 		sps[2*i+1].start=polys[i].start+radius;
 		p=polys[i].p.integral()-polys[i].p.integral()(polys[i].start);
@@ -408,7 +409,7 @@ PPolynomial<Degree+1> PPolynomial<Degree>::MovingAverage( double radius ) const/
 	}
 	A.set(sps,int(polyCount*2));//ÖØĞÂÕûÀíË³Ğò£¬ÕûÀíºópolyCountÓĞ¿ÉÄÜ»á±äĞ¡£¬²»ÔÙÊÇpolyCount*2
 	free(sps);
-	return A*1.0/(2*radius);//ÏñÊÇÄ³ÖÖ²åÖµ·½·¨
+	return A*1.0/(2*radius);
 }
 template<int Degree>
 void PPolynomial<Degree>::getSolutions(double c,std::vector<double>& roots,double EPS,double min,double max) const{

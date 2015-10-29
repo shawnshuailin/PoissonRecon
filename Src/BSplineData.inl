@@ -48,25 +48,25 @@ DAMAGE.
 // <=>		i > r - 1 - 0.5 * Degree
 //			i - 0.5 * Degree < r
 // <=>		i < r + 0.5 * Degree
-template< int Degree > inline bool LeftOverlap( unsigned int depth , int offset )
+template< int Degree > inline bool LeftOverlap( unsigned int depth , int offset )//没用到
 {
 	offset <<= 1;
-	if( Degree & 1 ) return (offset < 1+Degree) && (offset > -1-Degree );
+	if( Degree & 1 ) return (offset < 1+Degree) && (offset > -1-Degree );//Degree&1根据上面的解释应该在判断Degree的奇偶
 	else             return (offset <   Degree) && (offset > -2-Degree );
 }
-template< int Degree > inline bool RightOverlap( unsigned int depth , int offset )
+template< int Degree > inline bool RightOverlap( unsigned int depth , int offset )//没用到
 {
 	offset <<= 1;
 	int r = 1<<(depth+1);
 	if( Degree & 1 ) return (offset > 2-1-Degree) && (offset < 2+1+Degree );
 	else             return (offset > 2-2-Degree) && (offset < 2+  Degree );
 }
-template< int Degree > inline int ReflectLeft( unsigned int depth , int offset )
+template< int Degree > inline int ReflectLeft( unsigned int depth , int offset )//没用到
 {
 	if( Degree&1 ) return   -offset;
 	else           return -1-offset;
 }
-template< int Degree > inline int ReflectRight( unsigned int depth , int offset )
+template< int Degree > inline int ReflectRight( unsigned int depth , int offset )//没用到
 {
 	int r = 1<<(depth+1);
 	if( Degree&1 ) return r  -offset;
@@ -107,9 +107,9 @@ double BSplineData< Degree >::Integrator::dot( int depth , int off1 , int off2 ,
 		int ii , d = off2-off1 , res = (1<<depth);
 		if( off1<0 || off2<0 || off1>=res || off2>=res || d<-Degree || d>Degree ) return 0;//首先检查offset，res是当前深度下所有node的最大值吧，
 		//还要保证这两个BSpline function相差在Degree之间，否则二者没有交集
-		if     ( off1<     Degree ) ii = off1;
-		else if( off1>=res-Degree ) ii = 2*Degree + off1 - (res-1);//一定是Degree与off之间的关系得出这个结果的，具体什么关系还不知道
-		else                        ii = Degree;
+		if     ( off1<     Degree ) ii = off1;//小于Degree使得ii=off1，一共有Degree个
+		else if( off1>=res-Degree ) ii = 2*Degree + off1 - (res-1);//这里相当于在判断off1是否在两个边上，换算后相当于ii>=Degree+1，从res-Degree到res-1一共有Degree个
+		else                        ii = Degree;//这有单独一个，加起来就是iTable的数目2*Degree+1个
 		if     ( d1 && d2 ) return iTable.dd_ccIntegrals[ii][d+Degree];//两个都是derivative???
 		else if( d1       ) return iTable.dv_ccIntegrals[ii][d+Degree];//一个是derivative
 		else if(       d2 ) return iTable.vd_ccIntegrals[ii][d+Degree];
@@ -339,7 +339,7 @@ void BSplineData< Degree >::setIntegrator( Integrator& integrator , bool inset ,
 	for( int d=1 ; d<=depth ; d++ ) for( int i=0 ; i<=2*Degree ; i++ ) for( int j=-Degree ; j<=Degree ; j++ )
 	{
 		int res = 1<<d , ii = (i<=Degree ? i : i+(res/2)-1 - 2*Degree );
-		for( int c=0 ; c<2 ; c++ )//这是???
+		for( int c=0 ; c<2 ; c++ )//当前child node加0或1
 		{
 			integrator.iTables[d].vv_cpIntegrals[2*i+c][j+Degree] = dot( d , 2*ii+c , d-1 , ii+j , false , false , inset );
 			integrator.iTables[d].dv_cpIntegrals[2*i+c][j+Degree] = dot( d , 2*ii+c , d-1 , ii+j , true  , false , inset );

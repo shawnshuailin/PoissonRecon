@@ -87,6 +87,7 @@ public:
 	{
 		struct IntegralTables
 		{
+			//在offset符合区间[0, Degree)和[res-Degree, res-1]之间时，BSpline需要特殊处理，因此vector filed有2*Degree个特殊情况，剩下一个是正常的，总共2*Degree+1个
 			double vv_ccIntegrals[2*Degree+1][2*Degree+1] , vv_cpIntegrals[(2*Degree+1)*2][2*Degree+1];//难道是current child和current parent的区别???
 			double dv_ccIntegrals[2*Degree+1][2*Degree+1] , dv_cpIntegrals[(2*Degree+1)*2][2*Degree+1];
 			double vd_ccIntegrals[2*Degree+1][2*Degree+1] , vd_cpIntegrals[(2*Degree+1)*2][2*Degree+1];
@@ -126,7 +127,7 @@ public:
 	template< int Radius >
 	void setCornerEvaluator( CornerEvaluator< Radius >& evaluator , double smoothingRadius , double dSmoothingRadius, bool inset ) const;
 
-	struct BSplineComponents
+	struct BSplineComponents//当BSpline系数为Degree时，一共有Degree+1段折线，需要有Degree+1个多项式来表示这些折线，而且每个多项式的系数是Degree+1个
 	{
 		Polynomial< Degree > polys[Degree+1];
 		Polynomial< Degree >& operator[] ( int idx ) { return polys[idx]; }

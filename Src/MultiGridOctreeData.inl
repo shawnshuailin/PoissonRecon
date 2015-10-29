@@ -1286,7 +1286,7 @@ double Octree< Real >::GetDivergence2( const typename BSplineData< 2 >::Integrat
 template< class Real >
 Point3D< double > Octree< Real >::GetDivergence1( const typename BSplineData< 2 >::Integrator& integrator , int d , const int off1[] , const int off2[] , bool childParent ) const
 {
-	double vv[] =
+	double vv[] =//根据下文提示，这里v应该代表vector field
 	{
 		integrator.dot( d , off1[0] , off2[0] , false , false , childParent ) ,
 		integrator.dot( d , off1[1] , off2[1] , false , false , childParent ) ,
@@ -1300,7 +1300,7 @@ Point3D< double > Octree< Real >::GetDivergence1( const typename BSplineData< 2 
 		integrator.dot( d , off1[1] , off2[1] , false , true , childParent ) ,
 		integrator.dot( d , off1[2] , off2[2] , false , true , childParent )
 	};
-	return  Point3D< double >( vd[0]*vv[1]*vv[2] , vv[0]*vd[1]*vv[2] , vv[0]*vv[1]*vd[2] );
+	return  Point3D< double >( vd[0]*vv[1]*vv[2] , vv[0]*vd[1]*vv[2] , vv[0]*vv[1]*vd[2] );//最后这里的返回值没看懂跟divergence有什么关系???
 #else // !GRADIENT_DOMAIN_SOLUTION
 	// Take the dot-product of the divergence of the vector-field with the basis function
 	double dv[] = 
@@ -1487,7 +1487,7 @@ int Octree< Real >::SetMatrixRow( const SparseNodeData< PointData >& pointInfo ,
 	}
 	return count;
 }
-// if( scatter ) normals come from the center ndoe
+// if( scatter ) normals come from the center node
 // else          normals come from the neighbors
 template< class Real >
 void Octree< Real >::SetDivergenceStencil( int depth , const typename BSplineData< 2 >::Integrator& integrator , Stencil< Point3D< double > , 5 >& stencil , bool scatter ) const
@@ -1498,7 +1498,7 @@ void Octree< Real >::SetDivergenceStencil( int depth , const typename BSplineDat
 	for( int x=0 ; x<5 ; x++ ) for( int y=0 ; y<5 ; y++ ) for( int z=0 ; z<5 ; z++ )
 	{
 		int _offset[] = { x+center-2 , y+center-2 , z+center-2 };
-		if( scatter ) stencil.values[x][y][z] = GetDivergence1( integrator , depth , offset , _offset , false );
+		if( scatter ) stencil.values[x][y][z] = GetDivergence1( integrator , depth , offset , _offset , false );//scatter的时候以center node normal为主，因此用了divergence1，具体区别见函数内部
 		else          stencil.values[x][y][z] = GetDivergence2( integrator , depth , offset , _offset , false );
 	}
 }
@@ -2533,7 +2533,7 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 		SetDivergenceStencils( d , integrator , stencils , true );
 
 		std::vector< typename TreeOctNode::NeighborKey3 > neighborKeys( std::max< int >( 1 , threads ) );
-		for( size_t i=0 ; i<neighborKeys.size() ; i++ ) neighborKeys[i].set( _fData.depth );
+		for( size_t i=0 ; i<neighborKeys.size() ; i++ ) neighborKeys[i].set( _fData.depth );//记录了不同depth下的NeighborKey3
 #pragma omp parallel for num_threads( threads )
 		for( int i=_sNodes.nodeCount[d] ; i<_sNodes.nodeCount[d+1] ; i++ )
 		{
@@ -2550,15 +2550,15 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 				node->depthAndOffset( d , off );
 				int o = _boundaryType==0 ? (1<<(d-2)) : 0;
 				int mn = 2+o , mx = (1<<d)-2-o;
-				isInterior  = ( off[0]>=mn && off[0]<mx && off[1]>=mn && off[1]<mx && off[2]>=mn && off[2]<mx );
+				isInterior  = ( off[0]>=mn && off[0]<mx && off[1]>=mn && off[1]<mx && off[2]>=mn && off[2]<mx );//不在两边，既不在小于2的位置，也不在最后两个位置，其实mx=res-2-o
 				mn += 2 , mx -= 2;
 				isInterior2 = ( off[0]>=mn && off[0]<mx && off[1]>=mn && off[1]<mx && off[2]>=mn && off[2]<mx );
 			}
 			int cx , cy , cz;
 			if( d )
 			{
-				int c = int( node - node->parent->children );
-				Cube::FactorCornerIndex( c , cx , cy , cz );
+				int c = int( node - node->parent->children );//node在其所有兄弟节点中的偏移
+				Cube::FactorCornerIndex( c , cx , cy , cz );//判断出corner index
 			}
 			else cx = cy = cz = 0;
 			Stencil< Point3D< double > , 5 >& _stencil = stencils[cx][cy][cz];
@@ -2603,7 +2603,7 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 			// Set the constraints for the parents
 			if( depth>_minDepth )
 			{
-				neighborKey.getNeighbors( node->parent , neighbors5 );
+				neighborKey.getNeighbors( node->parent , neighbors5 );//取出了父节点的neighbor
 
 				for( int x=startX ; x<endX ; x++ ) for( int y=startY ; y<endY ; y++ ) for( int z=startZ ; z<endZ ; z++ )
 					if( neighbors5.neighbors[x][y][z] )
