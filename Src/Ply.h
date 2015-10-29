@@ -914,6 +914,56 @@ int PlyWritePolygons( char* fileName , CoredMeshData< Vertex >* mesh , int file_
 	ply_close( ply );
 	return 1;
 }
+
+template< class Vertex , class Real >
+int PlyWriteOctree(char* fileName , std::vector< Vertex >& vec_octreeGridVertex, std::vector<int>& vec_octreeGridFace , int file_type , XForm4x4< Real > xForm )
+{
+	int i;
+	int nr_vertices=int(vec_octreeGridVertex.size());
+	int nr_faces=int(vec_octreeGridVertex/*vec_octreeGridFace*/.size() / 3);
+	float version;
+	const char *elem_names[] = { "vertex" , "face" };
+	PlyFile *ply = ply_open_for_writing( fileName , 2 , elem_names , file_type , &version );
+	if( !ply ) return 0;
+
+	//
+	// describe vertex and face properties
+	//
+	ply_element_count( ply , "vertex" , nr_vertices );
+	for( int i=0 ; i<Vertex::WriteComponents ; i++ ) ply_describe_property( ply , "vertex" , &Vertex::WriteProperties[i] );
+
+	ply_element_count( ply , "face" , nr_faces );
+	ply_describe_property( ply , "face" , &face_props[0] );
+
+	// Write in the comments
+
+	ply_header_complete( ply );
+
+	// write vertices
+	ply_put_element_setup( ply , "vertex" );
+	for( i = 0 ; i < nr_vertices ; ++i )
+	{
+		Vertex vertex = xForm * vec_octreeGridVertex[i];
+		ply_put_element(ply, (void *) &vertex);
+	}
+
+	// write faces
+	ply_put_element_setup( ply , "face" );
+	PlyFace ply_face;
+	ply_face.nr_vertices = 3;
+	ply_face.vertices = new int[3];
+	for( i=0 ; i<nr_faces ; ++i )
+	{
+		ply_face.vertices[0] = vec_octreeGridFace[3 * i];
+		ply_face.vertices[1] = vec_octreeGridFace[3 * i + 1];
+		ply_face.vertices[2] = vec_octreeGridFace[3 * i + 2];
+		ply_put_element( ply, (void *) &ply_face );
+	}
+	delete[] ply_face.vertices;  // for, write faces
+
+	ply_close( ply );
+	return 1;
+}
 inline int PlyDefaultFileType(void){return PLY_ASCII;}
 
 #endif /* !__PLY_H__ */

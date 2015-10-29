@@ -111,8 +111,9 @@ cmdLineString
 	In( "in" ) ,
 	Out( "out" ) ,
 	VoxelGrid( "voxel" ) ,
+	OctreeGrid("octree"),
 	XForm( "xForm" );
-
+	
 cmdLineReadable
 #ifdef _WIN32
 	Performance( "performance" ) ,
@@ -159,7 +160,7 @@ cmdLineReadable* params[] =
 	&In , &Depth , &Out , &XForm ,
 	&Scale , &Verbose , &CSSolverAccuracy , &NoComments , &Double ,
 	&KernelDepth , &SamplesPerNode , &Confidence , &NormalWeights , &NonManifold , &PolygonMesh , &ASCII , &ShowResidual , &VoxelDepth ,
-	&PointWeight , &VoxelGrid , &Threads , &MaxSolveDepth ,
+	&PointWeight , &VoxelGrid , &OctreeGrid, &Threads , &MaxSolveDepth ,
 	&AdaptiveExponent , &BoundaryType ,
 	&Density ,
 	&FullDepth ,
@@ -180,6 +181,7 @@ void ShowUsage(char* ex)
 
 	printf( "\t[--%s <ouput triangle mesh>]\n" , Out.name );
 	printf( "\t[--%s <ouput voxel grid>]\n" , VoxelGrid.name );
+	printf( "\t[--%s <ouput adpative octree grid>]\n" , OctreeGrid.name );
 
 	printf( "\t[--%s <maximum reconstruction depth>=%d]\n" , Depth.name , Depth.value );
 	printf( "\t\t Running at depth d corresponds to solving on a 2^d x 2^d x 2^d\n" );
@@ -418,6 +420,13 @@ int Execute( int argc , char* argv[] )
 	DumpOutput2( comments , "#      Constraints set in: %9.1f (s), %9.1f (MB)\n" , Time()-t , tree.maxMemoryUsage );
 	DumpOutput( "Memory Usage: %.3f MB\n" , float( MemoryInfo::Usage())/(1<<20) );
 	maxMemoryUsage = std::max< double >( maxMemoryUsage , tree.maxMemoryUsage );
+	if( OctreeGrid.set )
+	{
+		std::vector<Vertex> octreeGridVertex;
+		std::vector<int> octreeGridFace;
+		tree.GetAdaptiveOctreeGrid(octreeGridVertex, octreeGridFace);
+		PlyWriteOctree( OctreeGrid.value , octreeGridVertex , octreeGridFace, PLY_BINARY_NATIVE, XForm4x4< Real >::Identity()/*xForm.inverse() */);
+	}
 
 	t=Time() , tree.maxMemoryUsage=0;
 	//求解方程
@@ -476,13 +485,13 @@ int Execute( int argc , char* argv[] )
 		if( NoComments.set )
 		{
 			//写入文件
-			if( ASCII.set ) PlyWritePolygons( Out.value , &mesh , PLY_ASCII         , NULL , 0 , iXForm );
-			else            PlyWritePolygons( Out.value , &mesh , PLY_BINARY_NATIVE , NULL , 0 , iXForm );
+			if( ASCII.set ) PlyWritePolygons( Out.value , &mesh , PLY_ASCII         , NULL , 0 , XForm4x4< Real >::Identity()/*iXForm*/ );
+			else            PlyWritePolygons( Out.value , &mesh , PLY_BINARY_NATIVE , NULL , 0 , XForm4x4< Real >::Identity()/*iXForm*/ );
 		}
 		else
 		{
-			if( ASCII.set ) PlyWritePolygons( Out.value , &mesh , PLY_ASCII         , &comments[0] , (int)comments.size() , iXForm );
-			else            PlyWritePolygons( Out.value , &mesh , PLY_BINARY_NATIVE , &comments[0] , (int)comments.size() , iXForm );
+			if( ASCII.set ) PlyWritePolygons( Out.value , &mesh , PLY_ASCII         , &comments[0] , (int)comments.size() , XForm4x4< Real >::Identity()/*iXForm*/ );
+			else            PlyWritePolygons( Out.value , &mesh , PLY_BINARY_NATIVE , &comments[0] , (int)comments.size() , XForm4x4< Real >::Identity()/*iXForm*/ );
 		}
 		DumpOutput( "Vertices / Polygons: %d / %d\n" , mesh.outOfCorePointCount()+mesh.inCorePoints.size() , mesh.polygonCount() );
 	}

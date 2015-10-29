@@ -265,14 +265,14 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 template< int Degree >
 double BSplineData< Degree >::dot( int depth1 ,  int off1 , int depth2 , int off2 , bool d1 , bool d2 , bool inset ) const//两个BSplineData的点乘
 {
-	const int _Degree1 = (d1 ? (Degree-1) : Degree) , _Degree2 = (d2 ? (Degree-1) : Degree);
+	const int _Degree1 = (d1 ? (Degree-1) : Degree) , _Degree2 = (d2 ? (Degree-1) : Degree);//d1或者d2为true代表是为derivative积分，所以degree要减一
 	int sums[ Degree+1 ][ Degree+1 ];
 
 	int depth = std::max< int >( depth1 , depth2 );
-
+	//inset在这里代表边界条件
 	BSplineElements< Degree > b1( 1<<depth1 , off1 , _boundaryType , inset ? ( 1<<(depth1-2) ) : 0 ) , b2( 1<<depth2 , off2 , _boundaryType , inset ? ( 1<<(depth2-2) ) : 0 );
 
-	BSplineElements< Degree > b;
+	BSplineElements< Degree > b;//depth不够，要做自循环
 	while( depth1<depth ) b=b1 , b.upSample( b1 ) , depth1++;
 	while( depth2<depth ) b=b2 , b.upSample( b2 ) , depth2++;
 
@@ -611,30 +611,31 @@ template< int Degree >
 BSplineElements< Degree >::BSplineElements( int res , int offset , int boundary , int inset )
 {
 	denominator = 1;
-	std::vector< BSplineElementCoefficients< Degree > >::resize( res , BSplineElementCoefficients< Degree >() );
+	std::vector< BSplineElementCoefficients< Degree > >::resize( res , BSplineElementCoefficients< Degree >() );//每一个独立的BSplineElementCoefficients都代表一个独立的多项式
+	//是否也是BSpline中一个独立的Element???
 
 	for( int i=0 ; i<=Degree ; i++ )
 	{
-		int idx = -_off + offset + i;
-		if( idx>=0 && idx<res ) (*this)[idx][i] = 1;
+		int idx = -_off + offset + i;//_off = (Degree+1)/2 = 1，则idx= offset + i - 1
+		if( idx>=0 && idx<res ) (*this)[idx][i] = 1;//初始化???
 	}
 	if( boundary!=0 )
 	{
 		_addLeft( offset-2*res , boundary ) , _addRight( offset+2*res , boundary );
-		if( Degree&1 ) _addLeft( offset-res , boundary ) , _addRight(  offset+res     , boundary );
+		if( Degree&1 ) _addLeft( offset-res , boundary ) , _addRight(  offset+res     , boundary );//Degree=2的话Degree&1等于0
 		else           _addLeft( -offset-1  , boundary ) , _addRight( -offset-1+2*res , boundary );
 	}
-	if( inset ) for( int i=0 ; i<inset && i<res ; i++ ) for( int j=0 ; j<=Degree ; j++ ) (*this)[i][j] = (*this)[res-1-i][j] = 0;
+	if( inset ) for( int i=0 ; i<inset && i<res ; i++ ) for( int j=0 ; j<=Degree ; j++ ) (*this)[i][j] = (*this)[res-1-i][j] = 0;//好像把两侧边界的系数全置为0
 }
 template< int Degree >
 void BSplineElements< Degree >::_addLeft( int offset , int boundary )
 {
-	int res = int( std::vector< BSplineElementCoefficients< Degree > >::size() );
+	int res = int( std::vector< BSplineElementCoefficients< Degree > >::size() );//为啥直接这样调用
 	bool set = false;
 	for( int i=0 ; i<=Degree ; i++ )
 	{
 		int idx = -_off + offset + i;
-		if( idx>=0 && idx<res ) (*this)[idx][i] += boundary , set = true;
+		if( idx>=0 && idx<res ) (*this)[idx][i] += boundary , set = true;//+=boundary是什么意思???
 	}
 	if( set ) _addLeft( offset-2*res , boundary );
 }
@@ -715,11 +716,12 @@ void BSplineElements< 2 >::upSample( BSplineElements< 2 >& high ) const
 template< int Degree >
 void BSplineElements< Degree >::differentiate( BSplineElements< Degree-1 >& d ) const
 {
+	//这里利用非静态函数的静态调用与直接用this->size()有什么区别
 	d.resize( std::vector< BSplineElementCoefficients< Degree > >::size() );
 	d.assign( d.size()  , BSplineElementCoefficients< Degree-1 >() );
 	for( int i=0 ; i<int(std::vector< BSplineElementCoefficients< Degree > >::size()) ; i++ ) for( int j=0 ; j<=Degree ; j++ )
 	{
-		if( j-1>=0 )   d[i][j-1] -= (*this)[i][j];
+		if( j-1>=0 )   d[i][j-1] -= (*this)[i][j];//这里同样出现了this指针，为什么上面调用size函数时不使用this指针
 		if( j<Degree ) d[i][j  ] += (*this)[i][j];
 	}
 	d.denominator = denominator;
@@ -735,7 +737,7 @@ void SetBSplineElementIntegrals( double integrals[Degree1+1][Degree2+1] )
 		for( int j=0 ; j<=Degree2 ; j++ )
 		{
 			Polynomial< Degree2 > p2 = Polynomial< Degree2 >::BSplineComponent( j );//p2的幂次为Degree2，range index为j
-			integrals[i][j] = ( p1 * p2 ).integral( 0 , 1 );//先进行多项式相乘，然后积分，区间为[0,1]，不明白为啥
+			integrals[i][j] = ( p1 * p2 ).integral( 0 , 1 );//先进行多项式相乘，然后积分，区间为[0,1]，不明白为啥，按照二维数组进行存储，i+j代表了某一乘积项的degree
 		}
 	}
 }

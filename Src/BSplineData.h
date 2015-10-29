@@ -41,10 +41,10 @@ struct BSplineElementCoefficients//表示系数的struct
 	const int& operator[]( int idx ) const { return coeffs[idx]; }
 };
 template< int Degree >
-struct BSplineElements : public std::vector< BSplineElementCoefficients< Degree > >//看来BSplineElements表示了多个BSpline Polynomial，用vector存储
+struct BSplineElements : public std::vector< BSplineElementCoefficients< Degree > >//看来BSplineElements表示了多个BSpline Polynomial，用vector存储，这些Element共同构成一个BSpline
 {
 	static const int _off = (Degree+1)/2;
-	void _addLeft ( int offset , int boundary );
+	void _addLeft ( int offset , int boundary );//addLeft和addRight都是循环迭代设置的
 	void _addRight( int offset , int boundary );
 public:
 	enum
@@ -90,7 +90,7 @@ public:
 			double vv_ccIntegrals[2*Degree+1][2*Degree+1] , vv_cpIntegrals[(2*Degree+1)*2][2*Degree+1];//难道是current child和current parent的区别???
 			double dv_ccIntegrals[2*Degree+1][2*Degree+1] , dv_cpIntegrals[(2*Degree+1)*2][2*Degree+1];
 			double vd_ccIntegrals[2*Degree+1][2*Degree+1] , vd_cpIntegrals[(2*Degree+1)*2][2*Degree+1];
-			double dd_ccIntegrals[2*Degree+1][2*Degree+1] , dd_cpIntegrals[(2*Degree+1)*2][2*Degree+1];
+			double dd_ccIntegrals[2*Degree+1][2*Degree+1] , dd_cpIntegrals[(2*Degree+1)*2][2*Degree+1];//d代表derivative
 		};
 		std::vector< IntegralTables > iTables;
 		double dot( int depth , int off1 , int off2 , bool d1 , bool d2 , bool childParent=false ) const;

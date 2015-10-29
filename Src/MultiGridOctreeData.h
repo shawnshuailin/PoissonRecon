@@ -487,6 +487,8 @@ public:
 	Real GetIsoValue( ConstPointer( Real ) solution , const std::vector< Real >& centerWeights );
 	template< class Vertex >
 	void GetMCIsoSurface( ConstPointer( Real ) kernelDensityWeights , const SparseNodeData< ProjectiveData< Point3D< Real > > >* colorData , ConstPointer( Real ) solution , Real isoValue , CoredMeshData< Vertex >& mesh , bool nonLinearFit=true , bool addBarycenter=false , bool polygonMesh=false );
+	template< class Vertex >
+	void GetAdaptiveOctreeGrid(std::vector<Vertex>& vec_octreeGridVertex, std::vector< int >& vec_octreeGridFace);
 };
 template< class Real >
 void Reset( void )

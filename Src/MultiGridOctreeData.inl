@@ -100,7 +100,7 @@ int Octree< Real >::SplatPointData( TreeOctNode* node , const Point3D< Real >& p
 	width=w;
 	for( int i=0 ; i<3 ; i++ )
 	{
-#if SPLAT_ORDER==2
+#if SPLAT_ORDER==2//SPLAT算法计算权重是根据二次幂计算，参考函数UpdateWeightContribution
 		off[i] = 0;
 		x = ( center[i] - position[i] - width ) / width;
 		dx[i][0] = 1.125+1.500*x+0.500*x*x;
@@ -108,7 +108,7 @@ int Octree< Real >::SplatPointData( TreeOctNode* node , const Point3D< Real >& p
 		dx[i][1] = 0.750        -      x*x;
 
 		dx[i][2] = 1. - dx[i][1] - dx[i][0];
-#elif SPLAT_ORDER==1
+#elif SPLAT_ORDER==1//一次幂
 		x = ( position[i] - center[i] ) / width;
 		if( x<0 )
 		{
@@ -155,6 +155,7 @@ template< class Real >
 template< class V >
 int Octree< Real >::SplatPointData( TreeOctNode* node , const Point3D< Real >& position , const V& v , SparseNodeData< V >& dataInfo , typename TreeOctNode::NeighborKey3& neighborKey )
 {
+	//参考函数UpdateWeightContribution
 	double x , dxdy , dxdydz , dx[DIMENSION][SPLAT_ORDER+1];
 	double width;
 	int off[3];
@@ -450,9 +451,9 @@ Real Octree< Real >::GetSamplesPerNode( ConstPointer( Real ) kernelDensityWeight
 
 	for( int i=0 ; i<DIMENSION ; i++ )
 	{
-		x = ( center[i] - position[i] - width ) / width;//[-1.5,-0.5]
+		x = ( center[i] - position[i] - width ) / width;//参考函数UpdateWeightContribution
 		dx[i][0] = 1.125 + 1.500*x + 0.500*x*x;
-		x = ( center[i] - position[i] ) / width;//[-0.5,0.5]，为什么这里不一样
+		x = ( center[i] - position[i] ) / width;
 		dx[i][1] = 0.750           -       x*x;
 
 		dx[i][2] = 1.0 - dx[i][1] - dx[i][0];
@@ -480,7 +481,7 @@ Real Octree< Real >::GetSamplesPerNode( ConstPointer( Real ) kernelDensityWeight
 
 	for( int i=0 ; i<DIMENSION ; i++ )
 	{
-		x = ( center[i] - position[i] - width ) / width;
+		x = ( center[i] - position[i] - width ) / width;//参考函数UpdateWeightContribution
 		dx[i][0] = 1.125 + 1.500*x + 0.500*x*x;
 		x = ( center[i] - position[i] ) / width;
 		dx[i][1] = 0.750           -       x*x;
@@ -509,7 +510,11 @@ int Octree< Real >::UpdateWeightContribution( std::vector< Real >& kernelDensity
 
 	for( int i=0 ; i<DIMENSION ; i++ )//一定要弄明白为什么这么算
 	{
-		x = ( center[i] - position[i] - width ) / width;//单调递减函数???，x取值在[-1.5, -0.5]之间??? 为什么
+		x = ( center[i] - position[i] - width ) / width;//经验证，就是注释中所谓的0.125/0.75/0.125的划分，至于权重为什么这么设定，论文中似乎没有提到
+		//而且，position点是在当前center node中的，下面的第一个x的值是p的某一维坐标到最左侧Neighbor中心点的距离，第二个x是
+		//到自己所在node的中心点的距离，根据下面公式计算，当p的位置在自己所在node的center时，可以得到0.125/0.75/0.125的默认权重，
+		//偏向左侧Neighbor时，权重逐渐变成0.5/0.5/0，偏向右侧Neighbor时，权重逐渐变成0/0.5/0.5，两侧权重都呈现出单调增减趋势
+		//中间node的权重会根据position到center的距离出现抛物线变化
 		dx[i][0] = 1.125 + 1.500*x + 0.500*x*x;
 		dx[i][1] = -0.25 - 2.*x - x*x;
 		dx[i][2] = 1. - dx[i][1] - dx[i][0];
@@ -520,13 +525,15 @@ int Octree< Real >::UpdateWeightContribution( std::vector< Real >& kernelDensity
 	//		0.125 / 0.75 / 0.125 across the three slices.
 	// Sampling at the center slice we get:
 	//		0.125^2 + 0.75^2 + 0.125^2 = 19/32
-	const double SAMPLE_SCALE = 1. / ( 0.125 * 0.125 + 0.75 * 0.75 + 0.125 * 0.125 );//感觉像是用一个kernel来进行convolution
+	//这块对weight的缩放实在是不太理解，所有weight加起来和为1，为什么还要放大这些计算好的weight
+	const double SAMPLE_SCALE = 1. / ( 0.125 * 0.125 + 0.75 * 0.75 + 0.125 * 0.125 );
 	weight *= (Real)SAMPLE_SCALE;
 
 	for( int i=0 ; i<3 ; i++ ) for( int j=0 ; j<3 ; j++ )
 	{
-		dxdy = dx[0][i] * dx[1][j] * weight;//这个算是对neighbor node的weight影响吗???
+		dxdy = dx[0][i] * dx[1][j] * weight;//早期版本的poisson中并没有weight的进一步缩放
 		TreeOctNode** _neighbors = neighbors.neighbors[i][j];
+		//要注意splat算法中其含义是将三维投射到二维中，所以在最后一维的weight好像是多个point sampleweight的叠加，具体可Google splatting(雪球算法)
 		for( int k=0 ; k<3 ; k++ ) if( _neighbors[k] ) kernelDensityWeights[ _neighbors[k]->nodeData.nodeIndex ] += Real( dxdy * dx[2][k] );//第三个轴的叠加作用在这里区分
 	}
 	return 0;
@@ -609,8 +616,10 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 			p = xForm * Point3D< Real >(_p.p);//变换
 			for( i=0 ; i<DIMENSION ; i++ )
 			{
-				if( !cnt || p[i]<min[i] ) min[i] = p[i];//找每个维度的最大最小值
-				if( !cnt || p[i]>max[i] ) max[i] = p[i];
+				if( !cnt || p[i]<min[i] ) 
+					min[i] = p[i];//找每个维度的最大最小值
+				if( !cnt || p[i]>max[i] ) 
+					max[i] = p[i];
 			}
 			cnt++;//point count
 		}
@@ -846,6 +855,36 @@ int Octree< Real >::SetTree( OrientedPointStream< PointReal >* pointStream , int
 	}
 	return cnt;
 }
+
+template< class Real >
+template< class Vertex >
+void Octree< Real >::GetAdaptiveOctreeGrid(std::vector<Vertex>& vec_octreeGridVertex, std::vector< int >& vec_octreeGridFace)
+{
+	int x, y, z;
+	int iCurVertexSize = 0;
+	int iCubeCornerTable [] = {0, 1, 2, 1, 3, 2, 1, 3, 5, 3, 7, 5, 5, 7, 6, 6, 4, 5, 4, 6, 0, 2, 0, 6, 3, 2, 7, 2, 6, 7, 0, 1, 4, 1, 5, 4};
+	for( TreeOctNode* temp=tree.nextLeaf() ; temp ; temp=tree.nextLeaf(temp) )
+	{
+		Point3D<Real> center;
+		Real w;
+		temp->centerAndWidth( center , w );
+		center -= Point3D<Real>(w/2, w/2, w/2);
+		for (int i = 0; i < Cube::CORNERS; ++i)
+		{
+			Cube::FactorCornerIndex(i, x, y, z);
+			Point3D<Real> corner = center + Point3D<Real>(w * x, w * y, w * z);
+			Vertex newVertex;
+			newVertex.point = corner * _scale + _center;
+			vec_octreeGridVertex.push_back(newVertex);
+		}
+		for (int i = 0; i < 36; ++i)
+		{
+			vec_octreeGridFace.push_back(iCubeCornerTable[i] + iCurVertexSize);
+		}
+		iCurVertexSize += Cube::CORNERS;
+	}
+}
+
 template< class Real >
 template< class PointReal , class Data , class _Data >
 int Octree< Real >::SetTree( OrientedPointStreamWithData< PointReal , Data >* pointStream , int minDepth , int maxDepth , int fullDepth , 
@@ -1453,7 +1492,7 @@ int Octree< Real >::SetMatrixRow( const SparseNodeData< PointData >& pointInfo ,
 template< class Real >
 void Octree< Real >::SetDivergenceStencil( int depth , const typename BSplineData< 2 >::Integrator& integrator , Stencil< Point3D< double > , 5 >& stencil , bool scatter ) const
 {
-	if( depth<2 ) return;
+	if( depth<2 ) return;//depth太小的情况下都没有足够的Neighbor用来计算
 	int center = 1<<(depth-1);
 	int offset[] = { center , center , center };
 	for( int x=0 ; x<5 ; x++ ) for( int y=0 ; y<5 ; y++ ) for( int z=0 ; z<5 ; z++ )
@@ -2488,8 +2527,8 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 
 	for( int d=maxDepth ; d>=(_boundaryType==0?2:0) ; d-- )
 	{
-		int offset = d>0 ? _sNodes.treeNodes[ _sNodes.nodeCount[d-1] ]->nodeData.nodeIndex : 0;
-		Stencil< Point3D< double > , 5 > stencil , stencils[2][2][2];
+		int offset = d>0 ? _sNodes.treeNodes[ _sNodes.nodeCount[d-1] ]->nodeData.nodeIndex : 0;//depth为d时的起始node Index
+		Stencil< Point3D< double > , 5 > stencil , stencils[2][2][2];//5代表使用NeighborKey5???
 		SetDivergenceStencil ( d , integrator , stencil , false );
 		SetDivergenceStencils( d , integrator , stencils , true );
 
