@@ -721,8 +721,8 @@ void BSplineElements< Degree >::differentiate( BSplineElements< Degree-1 >& d ) 
 	d.assign( d.size()  , BSplineElementCoefficients< Degree-1 >() );
 	for( int i=0 ; i<int(std::vector< BSplineElementCoefficients< Degree > >::size()) ; i++ ) for( int j=0 ; j<=Degree ; j++ )
 	{
-		if( j-1>=0 )   d[i][j-1] -= (*this)[i][j];//这里同样出现了this指针，为什么上面调用size函数时不使用this指针
-		if( j<Degree ) d[i][j  ] += (*this)[i][j];
+		if( j-1>=0 )   d[i][j-1] -= (*this)[i][j];//这里同样出现了this指针，为什么上面调用size函数时不使用this指针，为什么这里是负的
+		if( j<Degree ) d[i][j  ] += (*this)[i][j];//为什么这里还要加上原有的值
 	}
 	d.denominator = denominator;
 }

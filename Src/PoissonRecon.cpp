@@ -420,13 +420,6 @@ int Execute( int argc , char* argv[] )
 	DumpOutput2( comments , "#      Constraints set in: %9.1f (s), %9.1f (MB)\n" , Time()-t , tree.maxMemoryUsage );
 	DumpOutput( "Memory Usage: %.3f MB\n" , float( MemoryInfo::Usage())/(1<<20) );
 	maxMemoryUsage = std::max< double >( maxMemoryUsage , tree.maxMemoryUsage );
-	if( OctreeGrid.set )
-	{
-		std::vector<Vertex> octreeGridVertex;
-		std::vector<int> octreeGridFace;
-		tree.GetAdaptiveOctreeGrid(octreeGridVertex, octreeGridFace);
-		PlyWriteOctree( OctreeGrid.value , octreeGridVertex , octreeGridFace, PLY_BINARY_NATIVE, XForm4x4< Real >::Identity()/*xForm.inverse() */);
-	}
 
 	t=Time() , tree.maxMemoryUsage=0;
 	//求解方程
@@ -447,6 +440,15 @@ int Execute( int argc , char* argv[] )
 	delete centerWeights;
 	DumpOutput( "Got average in: %f\n" , Time()-t );
 	DumpOutput( "Iso-Value: %e\n" , isoValue );
+
+	if( OctreeGrid.set )
+	{
+		std::vector<PlyColorVertex< float>> octreeGridVertex;
+// 		std::vector<Vertex> octreeGridVertex;
+		std::vector<int> octreeGridFace;
+		tree.GetAdaptiveOctreeGrid(octreeGridVertex, octreeGridFace);
+		PlyWriteOctree( OctreeGrid.value , octreeGridVertex , octreeGridFace, PLY_BINARY_NATIVE, XForm4x4< Real >::Identity()/*xForm.inverse() */);
+	}
 
 	if( VoxelGrid.set )
 	{
