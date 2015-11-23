@@ -1306,7 +1306,8 @@ Point3D< double > Octree< Real >::GetDivergence1( const typename BSplineData< 2 
 {
 	double vv[] =//根据下文提示，这里v应该代表vector field
 	{
-		integrator.dot( d , off1[0] , off2[0] , false , false , childParent ) ,
+		//取出在off1与off2定义的BSpline的dot integral结果
+		integrator.dot( d , off1[0] , off2[0] , false , false , childParent ) , 
 		integrator.dot( d , off1[1] , off2[1] , false , false , childParent ) ,
 		integrator.dot( d , off1[2] , off2[2] , false , false , childParent )
 	};
@@ -1318,7 +1319,7 @@ Point3D< double > Octree< Real >::GetDivergence1( const typename BSplineData< 2 
 		integrator.dot( d , off1[1] , off2[1] , false , true , childParent ) ,
 		integrator.dot( d , off1[2] , off2[2] , false , true , childParent )
 	};
-	return  Point3D< double >( vd[0]*vv[1]*vv[2] , vv[0]*vd[1]*vv[2] , vv[0]*vv[1]*vd[2] );//最后这里的返回值没看懂跟divergence有什么关系???
+	return  Point3D< double >( vd[0]*vv[1]*vv[2] , vv[0]*vd[1]*vv[2] , vv[0]*vv[1]*vd[2] );//divergence就是任意坐标轴的梯度乘以其他两个坐标轴的scalar value，然后相加
 #else // !GRADIENT_DOMAIN_SOLUTION
 	// Take the dot-product of the divergence of the vector-field with the basis function
 	double dv[] = 
@@ -1511,15 +1512,15 @@ template< class Real >
 void Octree< Real >::SetDivergenceStencil( int depth , const typename BSplineData< 2 >::Integrator& integrator , Stencil< Point3D< double > , 5 >& stencil , bool scatter ) const
 {
 	if( depth<2 ) return;//depth太小的情况下都没有足够的Neighbor用来计算
-	int center = 1<<(depth-1);
+	int center = 1<<(depth-1);//不明白为什么要取center
 	int offset[] = { center , center , center };
 	for( int x=0 ; x<5 ; x++ ) for( int y=0 ; y<5 ; y++ ) for( int z=0 ; z<5 ; z++ )
 	{
-		int _offset[] = { x+center-2 , y+center-2 , z+center-2 };
+		int _offset[] = { x+center-2 , y+center-2 , z+center-2 };//左右各两个，加上中间自己
 		//scatter的时候以center node normal为主，因此offset用了vector field，而Neighbor用了gradient进行dot求解divergence，用了divergence1，具体区别见函数内部
 		if( scatter ) stencil.values[x][y][z] = GetDivergence1( integrator , depth , offset , _offset , false );
 		//反之，以Neighbor node normal为主，因此_offset用了vector field，center node用了gradient，用了divergence2
-		else          stencil.values[x][y][z] = GetDivergence2( integrator , depth , offset , _offset , false );
+		else          stencil.values[x][y][z] = GetDivergence2( integrator , depth , offset , _offset , false );//GetDivergence1是vd，GetDivergence2返回的是dv
 	}
 }
 template< class Real >
@@ -1532,7 +1533,7 @@ void Octree< Real >::SetDivergenceStencils( int depth , const typename BSplineDa
 		int offset[] = { center+i , center+j , center+k };
 		for( int x=0 ; x<5 ; x++ ) for( int y=0 ; y<5 ; y++ ) for( int z=0 ; z<5 ; z++ )
 		{
-			int _offset[] = { x-2+center/2 , y-2+center/2 , z-2+center/2 };
+			int _offset[] = { x-2+center/2 , y-2+center/2 , z-2+center/2 };//center/2相当于1<<(depth - 2)
 			if( scatter ) stencils[i][j][k].values[x][y][z] = GetDivergence1( integrator , depth , offset , _offset , true );
 			else          stencils[i][j][k].values[x][y][z] = GetDivergence2( integrator , depth , offset , _offset , true );
 		}
@@ -2562,7 +2563,7 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 		SetDivergenceStencils( d , integrator , stencils , true );//以d层center node为主，准备利用center node的normal field赋值vector field
 
 		std::vector< typename TreeOctNode::NeighborKey3 > neighborKeys( std::max< int >( 1 , threads ) );
-		for( size_t i=0 ; i<neighborKeys.size() ; i++ ) neighborKeys[i].set( _fData.depth );//记录了不同depth下的NeighborKey3
+		for( size_t i=0 ; i<neighborKeys.size() ; i++ ) neighborKeys[i].set( _fData.depth );//neighborKeys记录了从0到depth的neighbor3
 #pragma omp parallel for num_threads( threads )
 		for( int i=_sNodes.nodeCount[d] ; i<_sNodes.nodeCount[d+1] ; i++ )//这是第d层nodeCount的开始和结束
 		{

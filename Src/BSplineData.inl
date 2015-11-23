@@ -87,7 +87,7 @@ template< int Degree >
 double BSplineData< Degree >::Integrator::dot( int depth , int off1 , int off2 , bool d1 , bool d2 , bool childParent ) const
 {
 	if( depth<0 || depth>=int( iTables.size() ) ) return 0.;
-	const typename Integrator::IntegralTables& iTable = iTables[depth];
+	const typename Integrator::IntegralTables& iTable = iTables[depth];//取出对应depth计算出的Integral result
 	if( childParent )
 	{
 		int c = off1&1;
@@ -110,7 +110,7 @@ double BSplineData< Degree >::Integrator::dot( int depth , int off1 , int off2 ,
 		if     ( off1<     Degree ) ii = off1;//小于Degree使得ii=off1，一共有Degree个
 		else if( off1>=res-Degree ) ii = 2*Degree + off1 - (res-1);//这里相当于在判断off1是否在两个边上，换算后相当于ii>=Degree+1，从res-Degree到res-1一共有Degree个
 		else                        ii = Degree;//这有单独一个，加起来就是iTable的数目2*Degree+1个
-		if     ( d1 && d2 ) return iTable.dd_ccIntegrals[ii][d+Degree];//两个都是derivative???
+		if     ( d1 && d2 ) return iTable.dd_ccIntegrals[ii][d+Degree];//两个都是derivative
 		else if( d1       ) return iTable.dv_ccIntegrals[ii][d+Degree];//一个是derivative
 		else if(       d2 ) return iTable.vd_ccIntegrals[ii][d+Degree];
 		else                return iTable.vv_ccIntegrals[ii][d+Degree];//两个都不是derivative
