@@ -38,7 +38,7 @@ public:
 	static inline int CenterCount( int depth ) { return  1<<depth; }//深度为depth时的center数量，depth应该是从0开始的
 	static inline int CornerCount( int depth ) { return (1<<depth)+1; }//深度为depth时的corner数量
 	static inline int CumulativeCenterCount( int maxDepth ) { return (1<<(maxDepth+1))-1; }//累积的center数量，查了定义，树的深度是从零开始算的，计算到根节点的距离，高度是到叶节点的距离
-	static inline int CumulativeCornerCount( int maxDepth ) { return (1<<(maxDepth+1))+maxDepth; }//累积的corner数量
+	static inline int CumulativeCornerCount( int maxDepth ) { return (1<<(maxDepth+1))+maxDepth; }//累积的corner数量，这个统计数量有重复吧
 	//下面应该是center或者corner在cumulative情况下的index
 	static inline int CenterIndex( int depth , int offSet ) { return (1<<depth)+offSet-1; }//当深度为depth，偏移为offset时的center index
 	static inline int CornerIndex( int depth , int offSet ) { return (1<<depth)+offSet+depth; }//当深度为depth，偏移为offset时的corner index

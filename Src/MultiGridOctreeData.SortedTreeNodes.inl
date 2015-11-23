@@ -63,7 +63,7 @@ void SortedTreeNodes::set( TreeOctNode& root , std::vector< int >* map )
 	treeNodes = NewPointer< TreeOctNode* >( root.nodes() );
 
 	int startDepth = 0;
-	nodeCount[0] = 0 , nodeCount[1] = 1;//为什么一定有depth=1这一层???
+	nodeCount[0] = 0 , nodeCount[1] = 1;//如果只有root，那起始index是0，终止index是1，不包括1
 	treeNodes[0] = &root;
 	for( int d=startDepth+1 ; d<maxDepth ; d++ )
 	{

@@ -314,10 +314,13 @@ Polynomial< 0 > Polynomial< 0 >::BSplineComponent( int i )
 	return p;
 }
 template< int Degree >
-Polynomial< Degree > Polynomial< Degree >::BSplineComponent( int i )//函数中有scale和shift可以满足缩放和中心点移动的要求，这里就可以先计算出基函数
+Polynomial< Degree > Polynomial< Degree >::BSplineComponent( int i )//计算幂次为Degree的B样条曲线的每一个多项式
 {
-	//然后通过scale和shift来满足不同区间、不同中心点的要求
-	//i表示Knot span的区间，Degree表示B样条的幂次
+	//按照BSplineComponents的解释，此函数应该返回幂次为degree的B样条曲线第i段多项式
+	//i表示Knot span的区间，Degree表示B样条的幂次，但是这些不同span的多项式都是定义在[0,1]去区间上的，所以要得到正常BSpline在Degree+1个区间上的表示，
+	//需要通过scale和shift来满足不同区间、不同中心点的要求	
+	//可令Degree=2，分别令i=0,1,2来检查，对于i=0，计算结果不用平移，对于i=1,2，计算出的多项式分别为-x_2+x+0.5，0.5x_2-x+0.5，平移到[1,2]，[2,3]区间后
+	//分别为-x_2+3x-1.5和0.5(u-3)_2，与http://www.cs.mtu.edu/~shene/COURSES/cs3621/NOTES/spline/B-spline/bspline-basis.html结果一致
 	Polynomial p;//为什么这里不用指定Degree???
 	if( i>0 )
 	{
@@ -327,8 +330,8 @@ Polynomial< Degree > Polynomial< Degree >::BSplineComponent( int i )//函数中有sc
 	}
 	if( i<Degree )
 	{
-		Polynomial< Degree > _p = Polynomial< Degree-1 >::BSplineComponent( i ).integral();//这个简单的积分是什么意思???
-		p += _p;//这样加起来的东西算是什么B(0,1) = B(0,0).integral();???
+		Polynomial< Degree > _p = Polynomial< Degree-1 >::BSplineComponent( i ).integral();
+		p += _p;
 	}
 	return p;
 }

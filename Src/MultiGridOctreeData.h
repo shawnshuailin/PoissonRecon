@@ -129,7 +129,7 @@ public:
 	//nodeCount是一个分层记录，一维数组的维度等于maxDepth+1，每一个值代表了tree node在当前层index的初始值
 	//通过nodeCount[d+1]-nodeCount[d]来确定第d层的node数目
 	int *nodeCount;
-	int maxDepth;//树的最大深度???
+	int maxDepth;//sNode的maxDepth比Octree的深度大1
 	SortedTreeNodes( void );
 	~SortedTreeNodes( void );
 	void set( TreeOctNode& root , std::vector< int >* map );

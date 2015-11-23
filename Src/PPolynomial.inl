@@ -379,11 +379,11 @@ PPolynomial< 0 > PPolynomial< 0 >::BSpline( double radius )//ÔõÃ´±£Ö¤ÔÚDegreeµÈÓ
 	PPolynomial q;
 	q.set(2);//Ê¹µÃpolyCountµÈÓÚ2
 
-	q.polys[0].start=-radius;//ÎªÂïÊÇÕâ¸ö²Ù×÷£¬ÕâÏàµ±ÓÚÇø¼ä·Ö±ğÎª[-radius, infinity]ºÍ[radius, infinity]
+	q.polys[0].start=-radius;
 	q.polys[1].start= radius;
 
 	q.polys[0].p.coefficients[0]= 1.0;
-	q.polys[1].p.coefficients[0]=-1.0;//µ«ÊÇÈ¡ÖµÒ»¸öÊÇ1.0£¬Ò»¸öÊÇ-1.0
+	q.polys[1].p.coefficients[0]=-1.0;
 	return q;
 }
 template< int Degree >

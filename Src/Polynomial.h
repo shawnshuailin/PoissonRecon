@@ -86,7 +86,7 @@ public:
 	void getSolutions(double c,std::vector<double>& roots,double EPS) const;//多项式求解，c是一个常量，roots用来保存结果，EPS表示极小值，用来判断系数是否接近零
 	int getSolutions( double c , double* roots , double EPS ) const;//同上
 
-	static Polynomial BSplineComponent( int i );
+	static Polynomial BSplineComponent( int i );//计算幂次为Degree的B样条曲线的每一个多项式
 };
 
 #include "Polynomial.inl"

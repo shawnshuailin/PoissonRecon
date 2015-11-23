@@ -113,7 +113,7 @@ cmdLineString
 	VoxelGrid( "voxel" ) ,
 	OctreeGrid("octree"),
 	XForm( "xForm" );
-	
+
 cmdLineReadable
 #ifdef _WIN32
 	Performance( "performance" ) ,
@@ -262,11 +262,11 @@ void ShowUsage(char* ex)
 #if 0
 	printf( "\t[--%s]\n" , ASCII.name );
 	printf( "\t\t If this flag is enabled, the output file is written out in ASCII format.\n" );
-	
+
 	printf( "\t[--%s]\n" , NoComments.name );
 	printf( "\t\t If this flag is enabled, the output file will not include comments.\n" );
 #endif
-	
+
 	printf( "\t[--%s]\n" , Double.name );
 	printf( "\t\t If this flag is enabled, the reconstruction will be performed with double-precision floats.\n" );
 
@@ -328,18 +328,20 @@ int Execute( int argc , char* argv[] )
 	DumpOutput2( comments , "Running Screened Poisson Reconstruction (Version 7.0)\n" );
 	char str[1024];
 	for( int i=0 ; i<paramNum ; i++ )
+	{
 		if( params[i]->set )
 		{
 			params[i]->writeValue( str );//输出校对给定的输入参数
 			if( strlen( str ) ) DumpOutput2( comments , "\t--%s %s\n" , params[i]->name , str );
 			else                DumpOutput2( comments , "\t--%s\n" , params[i]->name );
 		}
+	}
 
 	double t;
 	double tt=Time();
 	Real isoValue = 0;
 
-	Octree< Real > tree;//此类应该是一个类似于isoOctree的接口类，竟然包含了threads等实际执行中用到的参数
+	Octree< Real > tree;//此类应该是一个类似于isoOctree的接口类，用来实现从数据输入、参数调用到输出的整个过程，包含了threads等实际执行中用到的参数
 	tree.threads = Threads.value;
 	if( !In.set )//两种极端情况，无输入数据
 	{
@@ -347,11 +349,11 @@ int Execute( int argc , char* argv[] )
 		return 0;
 	}
 	if( !MaxSolveDepth.set ) MaxSolveDepth.value = Depth.value;//未设定最大Octree深度
-	
+
 	OctNode< TreeNodeData >::SetAllocator( MEMORY_ALLOCATOR_BLOCK_SIZE );
 
 	t=Time();
-	int kernelDepth = KernelDepth.set ?  KernelDepth.value : Depth.value-2;//这个kernel是什么kernel，难道是box Filter
+	int kernelDepth = KernelDepth.set ?  KernelDepth.value : Depth.value-2;//这个kernel应该是splat point和normal的Depth
 	if( kernelDepth>Depth.value )
 	{
 		fprintf( stderr,"[ERROR] %s can't be greater than %s: %d <= %d\n" , KernelDepth.name , Depth.name , KernelDepth.value , Depth.value );
@@ -362,9 +364,9 @@ int Execute( int argc , char* argv[] )
 	t=Time() , tree.maxMemoryUsage=0;
 	//输入的必须数据，位置与法向
 	//typename是显式告诉编译器，后面定义的一大串东西是一个类型，而不是一个变量，否则*在解释时会被误解，其次c++规定，在没有歧义时也要用，如等号后半段
-	//sparseNodeData应该指的是单步求解中的矩阵A，是由basis function梯度的乘积的积分组成
 	typename Octree< Real >::template SparseNodeData< typename Octree< Real >::PointData >* pointInfo = new typename Octree< Real >::template SparseNodeData< typename Octree< Real >::PointData >();
-	typename Octree< Real >::template SparseNodeData< Point3D< Real > >* normalInfo = new typename Octree< Real >::template SparseNodeData< Point3D< Real > >();//法向，应该是两个输入数据，位置和法向
+	//存储了splat normal数据
+	typename Octree< Real >::template SparseNodeData< Point3D< Real > >* normalInfo = new typename Octree< Real >::template SparseNodeData< Point3D< Real > >();
 	//kernelDensityWeights--Enabling this flag tells the reconstructor to output the estimated depth values of 	the isosurface vertices.
 	std::vector< Real >* kernelDensityWeights = new std::vector< Real >();//后面resize的用法，经查证，只是在新增的位置设定为0，已有位置的值不变
 	//centerWeights是用来修改等值面提取时isoValue的值，因此最后的isoValue可能是加权平均而不是normal average
@@ -399,6 +401,8 @@ int Execute( int argc , char* argv[] )
 		//设置Octree用于重建，参数中包括了很多输入时给定的参数
 		//kernel depth在函数中对应于splatting depth，研究一下有什么用处
 		//samplesPerNode应该是在多个point被划分到同一个node的时候sample的多少
+		//kernelDensityWeights、pointInfo、normalInfo、centerWeights是输出，分别记录node的splat weight，screen weighted point position
+		//以及splatted normal和各个node splatted normal length，centerWeights在计算isoValue时要用到
 		pointCount = tree.template SetTree< float >( pointStream , MinDepth.value , Depth.value , FullDepth.value , kernelDepth , 
 			Real(SamplesPerNode.value) , Scale.value , Confidence.set , NormalWeights.set , PointWeight.value , AdaptiveExponent.value , 
 			*kernelDensityWeights , *pointInfo , *normalInfo , *centerWeights , xForm , BoundaryType.value , Complete.set );
@@ -414,7 +418,7 @@ int Execute( int argc , char* argv[] )
 
 	maxMemoryUsage = tree.maxMemoryUsage;
 	t=Time() , tree.maxMemoryUsage=0;
-	//设定laplacian constraint
+	//设定laplacian constraint，矩阵求解中的系数矩阵
 	Pointer( Real ) constraints = tree.SetLaplacianConstraints( *normalInfo );
 	delete normalInfo;
 	DumpOutput2( comments , "#      Constraints set in: %9.1f (s), %9.1f (MB)\n" , Time()-t , tree.maxMemoryUsage );
@@ -444,7 +448,7 @@ int Execute( int argc , char* argv[] )
 	if( OctreeGrid.set )
 	{
 		std::vector<PlyColorVertex< float>> octreeGridVertex;
-// 		std::vector<Vertex> octreeGridVertex;
+		// 		std::vector<Vertex> octreeGridVertex;
 		std::vector<int> octreeGridFace;
 		tree.GetAdaptiveOctreeGrid(octreeGridVertex, octreeGridFace);
 		PlyWriteOctree( OctreeGrid.value , octreeGridVertex , octreeGridFace, PLY_BINARY_NATIVE, XForm4x4< Real >::Identity()/*xForm.inverse() */);
@@ -547,17 +551,17 @@ int main( int argc , char* argv[] )
 			if( Double.set ) Execute< double , PlyVertex< float > >( argc , argv );
 			else             Execute< float  , PlyVertex< float > >( argc , argv );
 #ifdef _WIN32
-	if( Performance.set )
-	{
-		HANDLE cur_thread=GetCurrentThread();
-		FILETIME tcreat, texit, tkernel, tuser;
-		if( GetThreadTimes( cur_thread , &tcreat , &texit , &tkernel , &tuser ) )
-			printf( "Time (Wall/User/Kernel): %.2f / %.2f / %.2f\n" , Time()-t , to_seconds( tuser ) , to_seconds( tkernel ) );
-		else printf( "Time: %.2f\n" , Time()-t );
-		HANDLE h = GetCurrentProcess();
-		PROCESS_MEMORY_COUNTERS pmc;
- 		if( GetProcessMemoryInfo( h , &pmc , sizeof(pmc) ) ) printf( "Peak Memory (MB): %d\n" , pmc.PeakWorkingSetSize>>20 );
-	}
+			if( Performance.set )
+			{
+				HANDLE cur_thread=GetCurrentThread();
+				FILETIME tcreat, texit, tkernel, tuser;
+				if( GetThreadTimes( cur_thread , &tcreat , &texit , &tkernel , &tuser ) )
+					printf( "Time (Wall/User/Kernel): %.2f / %.2f / %.2f\n" , Time()-t , to_seconds( tuser ) , to_seconds( tkernel ) );
+				else printf( "Time: %.2f\n" , Time()-t );
+				HANDLE h = GetCurrentProcess();
+				PROCESS_MEMORY_COUNTERS pmc;
+				if( GetProcessMemoryInfo( h , &pmc , sizeof(pmc) ) ) printf( "Peak Memory (MB): %d\n" , pmc.PeakWorkingSetSize>>20 );
+			}
 #endif // _WIN32
-	return EXIT_SUCCESS;
+			return EXIT_SUCCESS;
 }

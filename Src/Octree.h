@@ -292,7 +292,7 @@ public:
 		Neighbors3& setNeighbors( OctNode* node );
 		Neighbors3& getNeighbors( OctNode* node );
 		void setNeighbors( OctNode* node , typename OctNode< NodeData >::Neighbors5& neighbors );
-		void getNeighbors( OctNode* node , typename OctNode< NodeData >::Neighbors5& neighbors );
+		void getNeighbors( OctNode* node , typename OctNode< NodeData >::Neighbors5& neighbors );//向node的parent回溯一层，找出node的Neighbors5 nodes
 
 		template< class Real > bool setChildNeighbors( Point3D< Real > p , int d , Neighbors3& childNeighbors ) const;
 		template< class Real > bool getChildNeighbors( Point3D< Real > p , int d , Neighbors3& childNeighbors ) const;

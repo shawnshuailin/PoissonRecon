@@ -191,54 +191,63 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 	depth = maxDepth;
 	// [Warning] This assumes that the functions spacing is dual，不明白
 	//难道在binaryNode的每个维度上都构建了functionCount个baseFunction
-	functionCount = BinaryNode::CumulativeCenterCount( depth );//binary node是octree在每个单一维度上的简化情况，而function count是累积的???
+	functionCount = BinaryNode::CumulativeCenterCount( depth );//binary node是octree在每个单一维度上的简化情况，而function count是累积的
 	sampleCount   = BinaryNode::CenterCount( depth ) + BinaryNode::CornerCount( depth );//B样条曲线的可采样点就是这些center加上corner，这些点有vertex value吧
 	baseFunctions = NewPointer< PPolynomial< Degree > >( functionCount );//base function，预分配空间，PPolynomial本身就表示多个多项式的叠加
 	//这里的空间应该分配给了每一个center节点，每个节点都是下面baseFunction计算出的结果
 	baseBSplines = NewPointer< BSplineComponents >( functionCount );//预分配空间，BSplineComponents与PPolynomial有啥区别
 	//BSplineComponents没有指明自变量空间
 
+	//用BoxFilter近似出的平滑方程作为baseFunction
 	baseFunction = PPolynomial< Degree >::BSpline();//Degree等于2的BSpline，作为平滑方程，经过推导，应该就是box Filter进行三次卷积后形成的平滑方程
-	for( int i=0 ; i<=Degree ; i++ ) baseBSpline[i] = Polynomial< Degree >::BSplineComponent( i ).shift( double(-(Degree+1)/2) + i - 0.5 );//为什么shift这么多???分别是-1.5，-0.5，0.5
+	//BSplineComponent给出在[0,1]区间下同一Degree不同段的多项式表示，然后根据每段具体的区间范围进行平移
+	//又整出一个baseBSpline
+	for( int i=0 ; i<=Degree ; i++ ) baseBSpline[i] = Polynomial< Degree >::BSplineComponent( i ).shift( double(-(Degree+1)/2) + i - 0.5 );//中心点原本在0.5，区间长度为1
+	//现在平移-1.5，-0.5，0.5后，中心点分别在-1,0,1，区间长度仍然是1
 	dBaseFunction = baseFunction.derivative();//basefunction的导数
 	StartingPolynomial< Degree > sPolys[Degree+4];
 
 	for( int i=0 ; i<Degree+3 ; i++ )
 	{
-		sPolys[i].start = double(-(Degree+1)/2) + i - 1.5;
+		sPolys[i].start = double(-(Degree+1)/2) + i - 1.5;//把阈值范围左右各扩大一个，从-2.5一直到2.5，共五个
 		sPolys[i].p *= 0;
-		if(         i<=Degree   )  sPolys[i].p += baseBSpline[i  ].shift( -1 ) * _boundaryType;
+		//根据_boundaryType不同，赋值不同。如果_boundaryType=0，则StartingPolynomial累加后仍然为三个有效区间[-1.5,-0.5][-0.5,0.5][0.5,1.5]，多项式仍为BSpline的值
+		if(i<=Degree)  sPolys[i].p += baseBSpline[i].shift( -1 ) * _boundaryType;//_boundaryType为正负1决定了是该加/减右侧区间平移后的BSpline多项式
 		if( i>=1 && i<=Degree+1 )  sPolys[i].p += baseBSpline[i-1];
 		for( int j=0 ; j<i ; j++ ) sPolys[i].p -= sPolys[j].p;
 	}
-	leftBaseFunction.set( sPolys , Degree+3 );
+	leftBaseFunction.set( sPolys , Degree+3 );//左边界往左shift一个区间
 	for( int i=0 ; i<Degree+3 ; i++ )
 	{
-		sPolys[i].start = double(-(Degree+1)/2) + i - 0.5;
+		sPolys[i].start = double(-(Degree+1)/2) + i - 0.5;//把阈值范围左右各扩大一个，从-1.5一直到3.5，共五个
 		sPolys[i].p *= 0;
-		if(         i<=Degree   )  sPolys[i].p += baseBSpline[i  ];
+		//根据_boundaryType不同，赋值不同。如果_boundaryType=0，则StartingPolynomial累加后仍然为三个有效区间[-1.5,-0.5][-0.5,0.5][0.5,1.5]，多项式仍为BSpline的值
+		if(i<=Degree)  sPolys[i].p += baseBSpline[i];
 		if( i>=1 && i<=Degree+1 )  sPolys[i].p += baseBSpline[i-1].shift( 1 ) * _boundaryType;
 		for( int j=0 ; j<i ; j++ ) sPolys[i].p -= sPolys[j].p;
 	}
-	rightBaseFunction.set( sPolys , Degree+3 );
-	for( int i=0 ; i<Degree+4 ; i++ )
+	rightBaseFunction.set( sPolys , Degree+3 );//右边界往右shift一个区间
+	for( int i=0 ; i<Degree+4 ; i++ )//把阈值范围左右各扩大一个，从-2.5一直到3.5，共六个
 	{
+		//StartingPolynomial合并和函数相当于在六个区间上覆盖了四个幂次为Degree的B样条函数，根据边界条件决定正负，上面两个
+		//这个是两侧偏移后的B样条函数都进行了区间覆盖，上面两种情况是只有左侧/右侧偏移后的B样条函数进行了区间覆盖
 		sPolys[i].start = double(-(Degree+1)/2) + i - 1.5;
 		sPolys[i].p *= 0;
-		if(         i<=Degree   )  sPolys[i].p += baseBSpline[i  ].shift( -1 ) * _boundaryType; // The left-shifted B-spline
+		if(i<=Degree)  sPolys[i].p += baseBSpline[i].shift( -1 ) * _boundaryType; // The left-shifted B-spline
 		if( i>=1 && i<=Degree+1 )  sPolys[i].p += baseBSpline[i-1];             // The centered B-Spline
 		if( i>=2 && i<=Degree+2 )  sPolys[i].p += baseBSpline[i-2].shift(  1 ) * _boundaryType; // The right-shifted B-spline
 		for( int j=0 ; j<i ; j++ ) sPolys[i].p -= sPolys[j].p;
 	}
 	leftRightBaseFunction.set( sPolys , Degree+4 );
 
-	dLeftBaseFunction  =  leftBaseFunction.derivative();
+	dLeftBaseFunction  =  leftBaseFunction.derivative();//导数
 	dRightBaseFunction = rightBaseFunction.derivative();
 	dLeftRightBaseFunction = leftRightBaseFunction.derivative();
-	leftRightBSpline = leftBSpline = rightBSpline = baseBSpline;
-	leftBSpline [1] +=  leftBSpline[2].shift( -1 ) ,  leftBSpline[0] *= 0;
-	rightBSpline[1] += rightBSpline[0].shift(  1 ) , rightBSpline[2] *= 0;
-	leftRightBSpline[1] += leftRightBSpline[2].shift( -1 ) + leftRightBSpline[0].shift( 1 ) , leftRightBSpline[0] *= 0 , leftRightBSpline[2] *= 0 ;
+	leftRightBSpline = leftBSpline = rightBSpline = baseBSpline;//这几个都是BSplineComponent，因此都表示一条单独的B样条曲线
+	//下面这几个应该是表示在不同的区间覆盖情况下，某一段区间上B样条叠加后的多项式结果，B样条叠加还是B样条???
+	leftBSpline [1] +=  leftBSpline[2].shift( -1 ) ,  leftBSpline[0] *= 0;//这个的意思是最左侧区间没有定义???中间的区间等于左侧偏移后的B样条的第二个区间的累加
+	rightBSpline[1] += rightBSpline[0].shift(  1 ) , rightBSpline[2] *= 0;//最右侧区间没有定义???中间的区间等于右侧偏移后的B样条的第一个区间的累加
+	leftRightBSpline[1] += leftRightBSpline[2].shift( -1 ) + leftRightBSpline[0].shift( 1 ) , leftRightBSpline[0] *= 0 , leftRightBSpline[2] *= 0 ;//两侧没定义，中间是两侧偏移的累加
 
 	double c , w;
 	for( size_t i=0 ; i<functionCount ; i++ )
@@ -247,16 +256,17 @@ void BSplineData< Degree >::set( int maxDepth , int boundaryType )
 		//下面这两种属于正常情况下的baseFunction和baseSpline
 		baseFunctions[i] = baseFunction.scale(w).shift(c);//base function，width是w，center是c，对基函数进行缩放和平移，这里相当于把平滑方程平移到每一个中心点位置，且平滑尺度大小不一
 		baseBSplines[i] = baseBSpline.scale(w).shift(c);//base BSpline function也一样
+		//下面就属于先把各区间的B样条累加情况在标准情况下先计算好，然后再进行平移和缩放
 		if( _boundaryType )//if(-1)是返回true
 		{
 			//这里应该是对边界情况单独进行处理，off=r-1，而且r=1<<d，那么r-1就是深度为d下的最后一个node
 			int d , off , r;
 			BinaryNode::DepthAndOffset( int(i) , d , off );//找出划分深度和在同一深度下的offset
 			r = 1<<d;
-			if     ( off==0 && off==r-1 ) baseFunctions[i] = leftRightBaseFunction.scale(w).shift(c);//那是不是意味着r=1，d=0，leftright是用在这种情况下的
-			else if( off==0             ) baseFunctions[i] =      leftBaseFunction.scale(w).shift(c);//最左边，只有leftBase
-			else if(           off==r-1 ) baseFunctions[i] =     rightBaseFunction.scale(w).shift(c);//最右边，只有rightBase
-			if     ( off==0 && off==r-1 ) baseBSplines [i] = leftRightBSpline.scale(w).shift(c);//同上???
+			if     ( off==0 && off==r-1 ) baseFunctions[i] = leftRightBaseFunction.scale(w).shift(c);//那是不是意味着r=1，d=0，那就是根节点的时候用
+			else if( off==0             ) baseFunctions[i] =      leftBaseFunction.scale(w).shift(c);//某一深度下第一个node center，为什么这时候左侧只缺失一个区间，而不是不缺失或者缺失两个，看来应该是有针对性设置的边界条件，一般只设置左或者右重叠，但对于只有一个node的情况下，就是左右都重叠
+			else if(           off==r-1 ) baseFunctions[i] =     rightBaseFunction.scale(w).shift(c);//某一深度下最后一个node center，同上，为什么右侧只缺失一个区间
+			if     ( off==0 && off==r-1 ) baseBSplines [i] = leftRightBSpline.scale(w).shift(c);//同上
 			else if( off==0             ) baseBSplines [i] =      leftBSpline.scale(w).shift(c);
 			else if(           off==r-1 ) baseBSplines [i] =     rightBSpline.scale(w).shift(c);
 		}
@@ -266,14 +276,14 @@ template< int Degree >
 double BSplineData< Degree >::dot( int depth1 ,  int off1 , int depth2 , int off2 , bool d1 , bool d2 , bool inset ) const//两个BSplineData的点乘
 {
 	const int _Degree1 = (d1 ? (Degree-1) : Degree) , _Degree2 = (d2 ? (Degree-1) : Degree);//d1或者d2为true代表是为derivative积分，所以degree要减一
-	int sums[ Degree+1 ][ Degree+1 ];
+	int sums[ Degree+1 ][ Degree+1 ];//为什么不是[ _Degree1+1 ][ _Degree2+1 ]
 
-	int depth = std::max< int >( depth1 , depth2 );
+	int depth = std::max< int >( depth1 , depth2 );//说明允许不同Depth的dot
 	//inset在这里代表边界条件
 	BSplineElements< Degree > b1( 1<<depth1 , off1 , _boundaryType , inset ? ( 1<<(depth1-2) ) : 0 ) , b2( 1<<depth2 , off2 , _boundaryType , inset ? ( 1<<(depth2-2) ) : 0 );
 
-	BSplineElements< Degree > b;//depth不够，要做自循环
-	while( depth1<depth ) b=b1 , b.upSample( b1 ) , depth1++;
+	BSplineElements< Degree > b;//先保证二者处于同一个Depth上
+	while( depth1<depth ) b=b1 , b.upSample( b1 ) , depth1++;//逗号表达式
 	while( depth2<depth ) b=b2 , b.upSample( b2 ) , depth2++;
 
 	BSplineElements< Degree-1 > db1 , db2;
@@ -282,14 +292,15 @@ double BSplineData< Degree >::dot( int depth1 ,  int off1 , int depth2 , int off
 	int start1=-1 , end1=-1 , start2=-1 , end2=-1;
 	for( int i=0 ; i<int( b1.size() ) ; i++ ) for( int j=0 ; j<=Degree ; j++ )
 	{
-		if( b1[i][j] && start1==-1 ) start1 = i;
-		if( b1[i][j] ) end1 = i+1;
-		if( b2[i][j] && start2==-1 ) start2 = i;
+		if( b1[i][j] && start1==-1 ) start1 = i;//找到第一个非零的系数
+		if( b1[i][j] ) end1 = i+1;//找到最后一个非零的系数
+		if( b2[i][j] && start2==-1 ) start2 = i;//同上
 		if( b2[i][j] ) end2 = i+1;
 	}
-	if( start1==end1 || start2==end2 || start1>=end2 || start2>=end1 ) return 0.;
-	int start = std::max< int >( start1 , start2 ) , end = std::min< int >( end1 , end2 );
+	if( start1==end1 || start2==end2 || start1>=end2 || start2>=end1 ) return 0.;//判断两个BSplineElement是否有重合的区间???
+	int start = std::max< int >( start1 , start2 ) , end = std::min< int >( end1 , end2 );//取交集
 	memset( sums , 0 , sizeof( sums ) );
+	//同一个interval上的coefficient进行了对应相乘，最后得到的sums与interval没有关系，只跟Degree有关
 	for( int i=start ; i<end ; i++ ) for( int j=0 ; j<=_Degree1 ; j++ ) for( int k=0 ; k<=_Degree2 ; k++ ) sums[j][k] += ( d1 ?  db1[i][j] : b1[i][j] ) * ( d2 ? db2[i][k] : b2[i][k] );
 	double _dot = 0;
 	if     ( d1 && d2 ) for( int j=0 ; j<=_Degree1 ; j++ ) for( int k=0 ; k<=_Degree2 ; k++ ) _dot += _ddIntegrals[j][k] * sums[j][k];
@@ -300,7 +311,7 @@ double BSplineData< Degree >::dot( int depth1 ,  int off1 , int depth2 , int off
 	_dot /= b2.denominator;
 	if     ( d1 && d2 ) return _dot * (1<<depth);
 	else if( d1 || d2 ) return _dot;
-	else                return _dot / (1<<depth);
+	else                return _dot / (1<<depth);//以上这些计算过程并不明白原理
 }
 template< int Degree >
 double BSplineData< Degree >::value( int depth ,  int off , double smoothingRadius ,  double s , bool d , bool inset ) const
@@ -321,17 +332,20 @@ double BSplineData< Degree >::value( int depth ,  int off , double smoothingRadi
 template< int Degree >
 void BSplineData< Degree >::setIntegrator( Integrator& integrator , bool inset , bool useDotRatios ) const
 {
-	integrator.iTables.resize( depth+1 );//估计要为每一层设置integrator table，i和j一个是从[0,2*Degree]，另一个是从[-Degree, Degree]
+	integrator.iTables.resize( depth+1 );//要为每一层设置integrator table，i和j一个是从[0,2*Degree]，另一个是从[-Degree, Degree]
+	//每一层设置的integrator都在两个边界上，左边是0到Degree，右边是res-1-Degree+1到res-1
+	//每个BSpline可以覆盖Degree+1个interval，在这些interval上可能与之发生区间重叠的有2Degree+1个BSpline，这是j的由来
 	for( int d=0 ; d<=depth ; d++ ) for( int i=0 ; i<=2*Degree ; i++ ) for( int j=-Degree ; j<=Degree ; j++ )
 	{
 		int res = 1<<d , ii = (i<=Degree ? i : i+res-1 - 2*Degree );
-		integrator.iTables[d].vv_ccIntegrals[i][j+Degree] = dot( d , ii , d , ii+j , false , false , inset );
+		//d和ii/ii+j的不同决定了BSpline定义的interval的不同，两个BSpline重合的区间也不同，导致dot的结果也不同
+		integrator.iTables[d].vv_ccIntegrals[i][j+Degree] = dot( d , ii , d , ii+j , false , false , inset );//前缀是vv，是两个value function的dot
 		integrator.iTables[d].dv_ccIntegrals[i][j+Degree] = dot( d , ii , d , ii+j , true  , false , inset );
 		integrator.iTables[d].vd_ccIntegrals[i][j+Degree] = dot( d , ii , d , ii+j , false , true  , inset );
 		integrator.iTables[d].dd_ccIntegrals[i][j+Degree] = dot( d , ii , d , ii+j , true  , true  , inset );
 		if( useDotRatios )
 		{
-			integrator.iTables[d].dv_ccIntegrals[i][j+Degree] /= integrator.iTables[d].vv_ccIntegrals[i][j+Degree];
+			integrator.iTables[d].dv_ccIntegrals[i][j+Degree] /= integrator.iTables[d].vv_ccIntegrals[i][j+Degree];//类似于normalization
 			integrator.iTables[d].vd_ccIntegrals[i][j+Degree] /= integrator.iTables[d].vv_ccIntegrals[i][j+Degree];
 			integrator.iTables[d].dd_ccIntegrals[i][j+Degree] /= integrator.iTables[d].vv_ccIntegrals[i][j+Degree];
 		}
@@ -611,21 +625,25 @@ template< int Degree >
 BSplineElements< Degree >::BSplineElements( int res , int offset , int boundary , int inset )
 {
 	denominator = 1;
-	std::vector< BSplineElementCoefficients< Degree > >::resize( res , BSplineElementCoefficients< Degree >() );//每一个独立的BSplineElementCoefficients都代表一个独立的多项式
-	//是否也是BSpline中一个独立的Element???
+	std::vector< BSplineElementCoefficients< Degree > >::resize( res , BSplineElementCoefficients< Degree >() );//这里调用为什么又采用了static用法
+	//每一个独立的BSplineElementCoefficients都代表属于同一个interval上的多项式linear combination，res是当前层下interval的数目
 
+	//推测，这里赋值了Degree+1个interval下不同idx的coefficient，这Degree+1个coefficient可能从属于同一个BSpline，如果最左侧覆盖interval的idx为0，
+	//中间覆盖interval的BSpline的idx为1，最右侧覆盖interval的BSpline的idx为2的话;
+	//如果上面猜测正确，那么由于同一BSpline具有连续性，上述属于同一个BSpline的interval coefficient应该满足一定的关系
 	for( int i=0 ; i<=Degree ; i++ )
 	{
 		int idx = -_off + offset + i;//_off = (Degree+1)/2 = 1，则idx= offset + i - 1
-		if( idx>=0 && idx<res ) (*this)[idx][i] = 1;//初始化???
+		if( idx>=0 && idx<res ) (*this)[idx][i] = 1;//idx指明当前赋值是哪一个interval，而每个interval最多被Degree+1个BSpline覆盖
 	}
-	if( boundary!=0 )
+	if( boundary!=0 )//就是外面的boundaryType
 	{
 		_addLeft( offset-2*res , boundary ) , _addRight( offset+2*res , boundary );
-		if( Degree&1 ) _addLeft( offset-res , boundary ) , _addRight(  offset+res     , boundary );//Degree=2的话Degree&1等于0
+		if( Degree&1 ) _addLeft( offset-res , boundary ) , _addRight(  offset+res     , boundary );//为什么Degree奇偶之间差别这么大
 		else           _addLeft( -offset-1  , boundary ) , _addRight( -offset-1+2*res , boundary );
 	}
 	if( inset ) for( int i=0 ; i<inset && i<res ; i++ ) for( int j=0 ; j<=Degree ; j++ ) (*this)[i][j] = (*this)[res-1-i][j] = 0;//好像把两侧边界的系数全置为0
+	//在第i个interval上的第j个覆盖
 }
 template< int Degree >
 void BSplineElements< Degree >::_addLeft( int offset , int boundary )
@@ -637,7 +655,7 @@ void BSplineElements< Degree >::_addLeft( int offset , int boundary )
 		int idx = -_off + offset + i;
 		if( idx>=0 && idx<res ) (*this)[idx][i] += boundary , set = true;//+=boundary是什么意思???
 	}
-	if( set ) _addLeft( offset-2*res , boundary );
+	if( set ) _addLeft( offset-2*res , boundary );//这是一个迭代循环
 }
 template< int Degree >
 void BSplineElements< Degree >::_addRight( int offset , int boundary )
@@ -649,7 +667,7 @@ void BSplineElements< Degree >::_addRight( int offset , int boundary )
 		int idx = -_off + offset + i;
 		if( idx>=0 && idx<res ) (*this)[idx][i] += boundary , set = true;
 	}
-	if( set ) _addRight( offset+2*res , boundary );
+	if( set ) _addRight( offset+2*res , boundary );//这是一个迭代循环
 }
 template< int Degree >
 void BSplineElements< Degree >::upSample( BSplineElements< Degree >& high ) const
@@ -685,10 +703,14 @@ void BSplineElements< 2 >::upSample( BSplineElements< 2 >& high ) const
 	// /          \     /    \           /    \           /    \           /    \
 	// |----------|     |----------|   |----------|   |----------|   |----------|
 
-	high.resize( size()*2 );
+	high.resize( size()*2 );//res扩大一倍
 	high.assign( high.size() , BSplineElementCoefficients<2>() );
 	for( int i=0 ; i<int(size()) ; i++ )
 	{
+		//c(high_0_left)    = c(low_0)     + 3*c(low_1),   c(high_1_left)   = 3*c(low_1)+c(low_2),      c(high_2_left)    = c(low_1)      + 3*c(low_2)
+		//c(high_0_right) = 3*c(low_0) + c(low_1),       c(high_1_right) = c(low_0)    +3*c(low_1),  c(high_2_right) = 3*c(low_1) + c(low_2)
+		//c(high_0_left)  = c(high_1_right); c(high_1_left) = c(high_2_right);应该可以推测出在左右相邻的两个interval上，左侧的第0个BSpline与右侧第1个BSpline是同一个，
+		//左侧第1个Spline与右侧第2个Spline是同一个，剩下两个系数不相关，从low继承到high的参数与继承自第几个BSpline以及继承的左右位置相关
 		high[2*i+0][0] += 1 * (*this)[i][0];
 		high[2*i+0][1] += 0 * (*this)[i][0];
 		high[2*i+0][2] += 0 * (*this)[i][0];
@@ -710,7 +732,7 @@ void BSplineElements< 2 >::upSample( BSplineElements< 2 >& high ) const
 		high[2*i+1][1] += 0 * (*this)[i][2];
 		high[2*i+1][2] += 1 * (*this)[i][2];
 	}
-	high.denominator = denominator * 4;
+	high.denominator = denominator * 4;//denominator扩大4倍
 }
 
 template< int Degree >
@@ -721,8 +743,8 @@ void BSplineElements< Degree >::differentiate( BSplineElements< Degree-1 >& d ) 
 	d.assign( d.size()  , BSplineElementCoefficients< Degree-1 >() );
 	for( int i=0 ; i<int(std::vector< BSplineElementCoefficients< Degree > >::size()) ; i++ ) for( int j=0 ; j<=Degree ; j++ )
 	{
-		if( j-1>=0 )   d[i][j-1] -= (*this)[i][j];//这里同样出现了this指针，为什么上面调用size函数时不使用this指针，为什么这里是负的
-		if( j<Degree ) d[i][j  ] += (*this)[i][j];//为什么这里还要加上原有的值
+		if( j-1>=0 )   d[i][j-1] -= (*this)[i][j];//这里同样出现了this指针，为什么上面调用size函数时不使用this指针
+		if( j<Degree ) d[i][j  ] += (*this)[i][j];//这个导数的求法没看懂???每个interval上有Degree+1个function，为什么是d[j] = d'[j]-d'[j+1];
 	}
 	d.denominator = denominator;
 }
@@ -733,11 +755,13 @@ void SetBSplineElementIntegrals( double integrals[Degree1+1][Degree2+1] )
 {
 	for( int i=0 ; i<=Degree1 ; i++ )
 	{
-		Polynomial< Degree1 > p1 = Polynomial< Degree1 >::BSplineComponent( i );//p1的幂次为Degree1，range index为i
+		Polynomial< Degree1 > p1 = Polynomial< Degree1 >::BSplineComponent( i );//p1的幂次为Degree1，range index为i，即Degree1的B样条的第i段，因此一共有Degree1+1个
 		for( int j=0 ; j<=Degree2 ; j++ )
 		{
 			Polynomial< Degree2 > p2 = Polynomial< Degree2 >::BSplineComponent( j );//p2的幂次为Degree2，range index为j
-			integrals[i][j] = ( p1 * p2 ).integral( 0 , 1 );//先进行多项式相乘，然后积分，区间为[0,1]，不明白为啥，按照二维数组进行存储，i+j代表了某一乘积项的degree
+			integrals[i][j] = ( p1 * p2 ).integral( 0 , 1 );//先进行多项式相乘，然后积分，区间为[0,1]，这就是文中说的两个B样条曲线的dot结果
+			//这里使用BSplineComponent进行的dot及积分，BSplineComponent都是未经过平移缩放的，其定义域就在[0,1]，其他地方均为零
+			//因此这里积分也相当于在整个定义域上积分，先dot integral之后再平移什么的也可以
 		}
 	}
 }

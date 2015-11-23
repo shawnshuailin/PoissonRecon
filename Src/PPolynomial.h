@@ -47,9 +47,10 @@ public:
 };
 
 template<int Degree>
-class PPolynomial//查查PPolynomial和StaringPolynomial
+class PPolynomial
 {
-//所谓的PPolynomial是指在表示B样条曲线时，对于不同定义域，其多项式表示并不相同，因此要用一个多项式vector来存储多个多项式
+	//PPolynomial用来表示文章中所示的BoxFilter这种分段函数，每一段都是一个多项式，但为了方便表示和计算，这里将其划分成多个StartingPolynomial,
+	//对于某一定义域[a, b]，其定义的真正多项式结果，应该为从第一个StartingPolynomial一直累加到start值等于a的StartingPolynomial为止
 public:
 	size_t polyCount;//当前对象中有多少个StartingPolynomial
 	//这些start只表示了每个多项式的最小取值
