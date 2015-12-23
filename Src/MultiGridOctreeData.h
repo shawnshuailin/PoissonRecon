@@ -257,6 +257,8 @@ protected:
 	Point3D< double > GetDivergence1( const typename BSplineData< 2 >::Integrator& integrator , int d , const int off1[3] , const int off2[3] , bool childParent ) const;
 	Point3D< double > GetDivergence2( const typename BSplineData< 2 >::Integrator& integrator , int d , const int off1[3] , const int off2[3] , bool childParent ) const;
 
+	//evaluator计算好了是/不是边界情况下与neighbor间的weight，stencil也要区分这种情况，但evaluator只考虑了binary node一维情况，属于一维模板
+	//stencil考虑了三维情况，如果预先计算针对所有情况的模板，情况会特别复杂，所以只计算了标准型，后续特殊情况临时计算结果
 	template< class C , int N > struct Stencil{ C values[N][N][N]; };
 	struct CenterValueStencil
 	{

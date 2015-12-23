@@ -1533,9 +1533,9 @@ void Octree< Real >::SetDivergenceStencils( int depth , const typename BSplineDa
 		int offset[] = { center+i , center+j , center+k };
 		for( int x=0 ; x<5 ; x++ ) for( int y=0 ; y<5 ; y++ ) for( int z=0 ; z<5 ; z++ )
 		{
-			int _offset[] = { x-2+center/2 , y-2+center/2 , z-2+center/2 };//center/2相当于1<<(depth - 2)
+			int _offset[] = { x-2+center/2 , y-2+center/2 , z-2+center/2 };//这个函数是用来计算child node和parent node之间的dot，所以_offset要在center/2周围变动
 			if( scatter ) stencils[i][j][k].values[x][y][z] = GetDivergence1( integrator , depth , offset , _offset , true );
-			else          stencils[i][j][k].values[x][y][z] = GetDivergence2( integrator , depth , offset , _offset , true );
+			else          stencils[i][j][k].values[x][y][z] = GetDivergence2( integrator , depth , offset , _offset , true );//childParent flag被置为true
 		}
 	}
 }
@@ -1569,26 +1569,28 @@ void Octree< Real >::SetLaplacianStencils( int depth , const typename BSplineDat
 template< class Real >
 void Octree< Real >::SetCenterEvaluationStencil( const typename BSplineData< 2 >::template CenterEvaluator< 1 >& evaluator , int depth , Stencil< double , 3 >& stencil ) const
 {
+	//这种stencil属于正常情况下的模板，左右位置的neighbor都存在
 	if( depth<2 ) return;
 	int center = 1<<(depth-1);
 	for( int x=0 ; x<3 ; x++ ) for( int y=0 ; y<3 ; y++ ) for( int z=0 ; z<3 ; z++ )
 	{
-		int off[] = { center+x-1 , center+y-1 , center+z-1 };
-		//看来像是在每个维度上都算了一遍，然后相乘，倒是比较符合trivariate BSpline function的定义
+		int off[] = { center+x-1 , center+y-1 , center+z-1 };//左右各偏移一个位置
+		//每个维度上都算了一遍，然后相乘，center与neighbor属于同一层，而且求的是value乘积不是gradient value乘积
 		stencil.values[x][y][z] = Real( evaluator.value( depth , center , off[0] , false , false ) * evaluator.value( depth , center , off[1] , false , false ) * evaluator.value( depth , center , off[2] , false , false ) );
 	}
 }
 template< class Real >
 void Octree< Real >::SetCenterEvaluationStencils( const typename BSplineData< 2 >::template CenterEvaluator< 1 >& evaluator , int depth , Stencil< double , 3 > stencils[8] ) const
 {
+	//这个函数产生的child parent的value stencil，根据子节点与parent node位置的不同分为八种情况
 	if( depth<3 ) return;
-	int center = 1<<(depth-1);
-	for( int cx=0 ; cx<2 ; cx++ ) for( int cy=0 ; cy<2 ; cy++ ) for( int cz=0 ; cz<2 ; cz++ )
+	int center = 1<<(depth-1);//depth与center是同一层
+	for( int cx=0 ; cx<2 ; cx++ ) for( int cy=0 ; cy<2 ; cy++ ) for( int cz=0 ; cz<2 ; cz++ )//center由上面的式子赋值，一定是偶数，位于其parent的左侧，这里加0或1就是要遍历同一个parent下的所有child node，将这不同的八种情况都作为stencil
 	{
 		int idx[] = { center+cx , center+cy , center+cz };
 		for( int x=0 ; x<3 ; x++ ) for( int y=0 ; y<3 ; y++ ) for( int z=0 ; z<3 ; z++ )
 		{
-			int off[] = { center/2+x-1 , center/2+y-1 , center/2+z-1 };
+			int off[] = { center/2+x-1 , center/2+y-1 , center/2+z-1 };//off是父节点那一层的neighbor，与center的parent node左右偏离各一个node
 			stencils[Cube::CornerIndex( cx , cy , cz ) ].values[x][y][z] = Real( evaluator.value( depth , idx[0] , off[0] , false , true ) * evaluator.value( depth , idx[1] , off[1] , false , true ) * evaluator.value( depth , idx[2] , off[2] , false , true ) );
 		}
 	}
@@ -2220,7 +2222,7 @@ Pointer( Real ) Octree< Real >::SolveSystem( SparseNodeData< PointData >& pointI
 	iters = std::max< int >( 0 , iters );
 	if( _boundaryType==0 ) maxSolveDepth++ , cgDepth++;
 
-	Pointer( Real ) solution = AllocPointer< Real >( _sNodes.nodeCount[_sNodes.maxDepth] );//看来sortedOctreeNode很重要
+	Pointer( Real ) solution = AllocPointer< Real >( _sNodes.nodeCount[_sNodes.maxDepth] );//Octree node总数
 	memset( solution , 0 , sizeof(Real)*_sNodes.nodeCount[_sNodes.maxDepth] );
 
 	solution[0] = 0;
@@ -2229,12 +2231,12 @@ Pointer( Real ) Octree< Real >::SolveSystem( SparseNodeData< PointData >& pointI
 	for( int d=_minDepth ; d<_sNodes.maxDepth ; d++ )
 	{
 		DumpOutput( "Depth[%d/%d]: %d\n" , _boundaryType==0 ? d-1 : d , _boundaryType==0 ? _sNodes.maxDepth-2 : _sNodes.maxDepth-1 , _sNodes.nodeCount[d+1]-_sNodes.nodeCount[d] );
-		if( d==_minDepth )
-			_SolveSystemCG( pointInfo , d , integrator , _sNodes , solution , constraints , GetPointer( metSolution ) , _sNodes.nodeCount[_minDepth+1]-_sNodes.nodeCount[_minDepth] , true , showResidual, NULL , NULL , NULL );
+		if( d==_minDepth )//这一层求解用了conjugate-gradient
+			_SolveSystemCG( pointInfo , d , integrator , _sNodes , solution , constraints , GetPointer( metSolution ) , _sNodes.nodeCount[_minDepth+1]-_sNodes.nodeCount[_minDepth] , true , showResidual, NULL , NULL , NULL );//minDepth层的node数目
 		else
-		{
+		{	//这些求解用到了block gaussian seidel iteration
 			if( d>cgDepth ) iter += _SolveSystemGS( pointInfo , d , integrator , _sNodes , solution , constraints , GetPointer( metSolution ) , d>maxSolveDepth ? 0 : iters , true , showResidual , NULL , NULL , NULL );
-			else            iter += _SolveSystemCG( pointInfo , d , integrator , _sNodes , solution , constraints , GetPointer( metSolution ) , d>maxSolveDepth ? 0 : iters , true , showResidual , NULL , NULL , NULL , accuracy );
+			else            iter += _SolveSystemCG( pointInfo , d , integrator , _sNodes , solution , constraints , GetPointer( metSolution ) , d>maxSolveDepth ? 0 : iters , true , showResidual , NULL , NULL , NULL , accuracy );//如果没大于cgDepth，求解还是用conjugate-gradient
 		}
 	}
 
@@ -2278,20 +2280,20 @@ int Octree< Real >::_SolveSystemGS( SparseNodeData< PointData >& pointInfo , int
 	double _maxMemoryUsage = maxMemoryUsage;
 	maxMemoryUsage = 0;
 	Vector< Real > X , B;
-	int slices = 1<<depth;
+	int slices = 1<<depth;//binary node在depth下的划分数目
 	double systemTime=0. , solveTime=0. , updateTime=0. ,  evaluateTime = 0.;
 	std::vector< int > offsets( slices+1 , 0 );
-	for( int i=sNodes.nodeCount[depth] ; i<sNodes.nodeCount[depth+1] ; i++ )
+	for( int i=sNodes.nodeCount[depth] ; i<sNodes.nodeCount[depth+1] ; i++ )//当前层求解的node index起始和截止
 	{
 		int d , off[3];
 		sNodes.treeNodes[i]->depthAndOffset( d , off );
-		offsets[ off[2] ]++;
+		offsets[ off[2] ]++;//在z轴统计
 	}
-	for( int i=1 ; i<slices ; i++ )  offsets[i] += offsets[i-1];
-	for( int i=slices ; i>=1 ; i-- ) offsets[i]  = offsets[i-1];
+	for( int i=1 ; i<slices ; i++ )  offsets[i] += offsets[i-1];//叠加
+	for( int i=slices ; i>=1 ; i-- ) offsets[i]  = offsets[i-1];//offset[i+1] - offset[i]代表node的z轴坐标等于i时在depth层的node size
 	offsets[0] = 0;
 
-	X.Resize( sNodes.nodeCount[depth+1]-sNodes.nodeCount[depth] );
+	X.Resize( sNodes.nodeCount[depth+1]-sNodes.nodeCount[depth] );//分配x和b还是按照depth层的节点数目
 	B.Resize( sNodes.nodeCount[depth+1]-sNodes.nodeCount[depth] );
 	if( coarseToFine )
 	{
@@ -2315,7 +2317,7 @@ int Octree< Real >::_SolveSystemGS( SparseNodeData< PointData >& pointInfo , int
 		for( int i=_sNodes.nodeCount[depth] ; i<_sNodes.nodeCount[depth+1] ; i++ ) constraints[i] -= metConstraints[i];
 	// Initialize with the previously computed solution
 #pragma omp parallel for num_threads( threads )
-	for( int i=_sNodes.nodeCount[depth] ; i<_sNodes.nodeCount[depth+1] ; i++ ) X[ i-_sNodes.nodeCount[depth] ] = solution[i];
+	for( int i=_sNodes.nodeCount[depth] ; i<_sNodes.nodeCount[depth+1] ; i++ ) X[ i-_sNodes.nodeCount[depth] ] = solution[i];//用前一步求解结果进行迭代
 	double bNorm=0 , inRNorm=0 , outRNorm=0;
 	if( depth>=_minDepth )
 	{
@@ -2436,7 +2438,7 @@ int Octree< Real >::_SolveSystemCG( SparseNodeData< PointData >& pointInfo , int
 	Vector< Real > X , B;
 	SparseSymmetricMatrix< Real > M;
 	double systemTime=0. , solveTime=0. , updateTime=0. ,  evaluateTime = 0.;
-	X.Resize( sNodes.nodeCount[depth+1]-sNodes.nodeCount[depth] );
+	X.Resize( sNodes.nodeCount[depth+1]-sNodes.nodeCount[depth] );//当前层的node数目
 	if( coarseToFine )
 	{
 		if( depth>_minDepth )
@@ -2539,6 +2541,9 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 	// divergence of the normal field with all the basis functions.
 	// Within the same depth: set directly as a gather
 	// Coarser depths 
+	//constraint作为最后返回值，一共经历了三次修改，第一次是同层之间的overlapping node dot，第二次是用finer node downsample coarser node，
+	//第三次是用所有的coarser node计算 finer node；第一次用了center node的同层neighbor node normal和gradient，第二次计算时用了center node的normal和
+	//gradient，第三次用了upsample的normal field
 	typename BSplineData< 2 >::Integrator integrator;
 	_fData.setIntegrator( integrator , _boundaryType==0 );
 	int maxDepth = _sNodes.maxDepth-1;//_sNodes的maxDepth比Octree大一层，因此局部变量maxDepth代表了Octree的实际深度
@@ -2548,12 +2553,12 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 	if( !constraints ) fprintf( stderr , "[ERROR] Failed to allocate constraints: %d * %zu\n" , _sNodes.nodeCount[_sNodes.maxDepth] , sizeof( Real ) ) , exit( 0 );
 	memset( constraints , 0 , sizeof(Real)*_sNodes.nodeCount[_sNodes.maxDepth] );
 	//比上面的constraint少了一层的node，这里maxDepth = _sNodes.maxDepth-1，局部变量
-	Pointer( Real ) _constraints = AllocPointer< Real >( _sNodes.nodeCount[maxDepth] );
+	Pointer( Real ) _constraints = AllocPointer< Real >( _sNodes.nodeCount[maxDepth] );//表示了除最后一层以外其余层node数目之和
 	if( !_constraints ) fprintf( stderr , "[ERROR] Failed to allocate _constraints: %d * %zu\n" , _sNodes.nodeCount[maxDepth] , sizeof( Real ) ) , exit( 0 );
 	memset( _constraints , 0 , sizeof(Real)*_sNodes.nodeCount[maxDepth] );
 	MemoryUsage();
 
-	for( int d=maxDepth ; d>=(_boundaryType==0?2:0) ; d-- )//从_sNodes.maxDepth的上一层开始
+	for( int d=maxDepth ; d>=(_boundaryType==0?2:0) ; d-- )//maxDepth = _sNodes.maxDepth -1
 	{
 		//sorted node在某一depth下的node Count是由nodeCount[d]和nodeCount[d+1]决定的，nodeIndex应该是在splatting normal时候分配的
 		//这个offset就是d-1层nodeIndex的开始
@@ -2565,7 +2570,8 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 		std::vector< typename TreeOctNode::NeighborKey3 > neighborKeys( std::max< int >( 1 , threads ) );
 		for( size_t i=0 ; i<neighborKeys.size() ; i++ ) neighborKeys[i].set( _fData.depth );//neighborKeys记录了从0到depth的neighbor3
 #pragma omp parallel for num_threads( threads )
-		for( int i=_sNodes.nodeCount[d] ; i<_sNodes.nodeCount[d+1] ; i++ )//这是第d层nodeCount的开始和结束
+		//这是第d层nodeCount的开始和结束，当d=maxDepth=_sNodes.maxDepth-1时，是_sNodes最后一层的node，因此这个循环包含了Octree最深一层的node
+		for( int i=_sNodes.nodeCount[d] ; i<_sNodes.nodeCount[d+1] ; i++ )
 		{
 			typename TreeOctNode::NeighborKey3& neighborKey = neighborKeys[ omp_get_thread_num() ];//线程变量
 			TreeOctNode* node = _sNodes.treeNodes[i];
@@ -2582,7 +2588,7 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 				int mn = 2+o , mx = (1<<d)-2-o;
 				//不在两边，既不在小于2的位置，也不在最后两个位置，其实mx=res-2-o
 				isInterior  = ( off[0]>=mn && off[0]<mx && off[1]>=mn && off[1]<mx && off[2]>=mn && off[2]<mx );//在这个范围内可以保证左右两侧的overlapping BSpline都存在
-				mn += 2 , mx -= 2;//又向内缩进2个node
+				mn += 2 , mx -= 2;//又向内缩进2个node，用在了计算与parent neighbor的重叠关系中
 				isInterior2 = ( off[0]>=mn && off[0]<mx && off[1]>=mn && off[1]<mx && off[2]>=mn && off[2]<mx );
 			}
 			int cx , cy , cz;
@@ -2598,19 +2604,22 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 			// Set constraints from current depth
 			// Gather the constraints from the vector-field at _node into the constraint stored with node
 			{
-
+				//在考虑同一层node间的重合关系时，直接对constraint变量进行赋值，而不是_constraint
 				if( isInterior )
+				{
 					for( int x=startX ; x<endX ; x++ ) for( int y=startY ; y<endY ; y++ ) for( int z=startZ ; z<endZ ; z++ )
 					{
 						const TreeOctNode* _node = neighbors5.neighbors[x][y][z];//取三环邻域node
 						if( _node )
 						{
 							int _idx = normalInfo.index( _node );//取出normal index
-							//因为stencil取值时以利用Neighbor node的normal field为目标，这里的normalInfo自然来源于邻域node
+							//因为stencil取值时利用Neighbor node的normal field为目标，这里的normalInfo自然来源于邻域node
 							if( _idx>=0 ) constraints[ node->nodeData.nodeIndex ] += Point3D< Real >::Dot( stencil.values[x][y][z] , normalInfo.data[ _idx ] );
 						}
 					}
+				}
 				else
+				{	
 					for( int x=startX ; x<endX ; x++ ) for( int y=startY ; y<endY ; y++ ) for( int z=startZ ; z<endZ ; z++ )
 					{
 						const TreeOctNode* _node = neighbors5.neighbors[x][y][z];
@@ -2621,12 +2630,14 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 							{
 								int _d , _off[3];
 								_node->depthAndOffset( _d , _off );
-								//GetDivergence2是off的gradient乘以_off的vector field，然后再点乘_off的normal，为什么跟上面用off的vector field，_off的gradient不一样
+								//GetDivergence2是off的gradient乘以_off的vector field，然后再点乘_off的normal，跟上面的计算过程一样，只是没用到标准的stencil
 								constraints[ node->nodeData.nodeIndex ] += Real( GetDivergence2( integrator , d , off , _off , false , normalInfo.data[ _idx ] ) );
 							}
 						}
 					}
-					UpdateCoarserSupportBounds( neighbors5.neighbors[2][2][2] , startX , endX , startY  , endY , startZ , endZ );//修改StartX/EndX等的值
+				}
+				//neighbors[2][2][2]就是current node，这是根据current node在parent node中的位置修改startX等的值，因为parent neighbor[0-4]并不都与current node重合
+				UpdateCoarserSupportBounds( neighbors5.neighbors[2][2][2] , startX , endX , startY  , endY , startZ , endZ );
 			}
 			int idx = normalInfo.index( node );
 			if( idx<0 ) continue;
@@ -2639,6 +2650,7 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 				neighborKey.getNeighbors( node->parent , neighbors5 );//取出了父节点的neighbor
 
 				for( int x=startX ; x<endX ; x++ ) for( int y=startY ; y<endY ; y++ ) for( int z=startZ ; z<endZ ; z++ )
+				{
 					if( neighbors5.neighbors[x][y][z] )
 					{
 						TreeOctNode* _node = neighbors5.neighbors[x][y][z];
@@ -2652,28 +2664,30 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 						{
 							int _d , _off[3];
 							_node->depthAndOffset( _d , _off );
-							c = Real( GetDivergence1( integrator , d , off , _off , true , normal ) );//off的vector field和_off的gradient vector field
+							//off的vector field和_off的gradient vector field，由于是child node和parent node的dot，childParent flag被置为true
+							c = Real( GetDivergence1( integrator , d , off , _off , true , normal ) );
 						}
 #pragma omp atomic
-						_constraints[ _node->nodeData.nodeIndex ] += c;//修改线程统一变量
+						_constraints[ _node->nodeData.nodeIndex ] += c;//修改parent node的constraint，这里对_constraint赋值而不是constraint
 					}
+				}
 			}
 		}
 		MemoryUsage();
 	}
 
-	// Fine-to-coarse down-sampling of constraints，maxDepth-1，比实际Octree的深度又少一层
+	// Fine-to-coarse down-sampling of constraints，maxDepth-1，比实际Octree的深度又少一层，因为是在parent node间进行_constraint下采样
 	//这里采用了指针偏移的方式，那么_constraints + _sNodes.nodeCount[d]应该代表第d层_constraints的开始，下同理
 	for( int d=maxDepth-1 ; d>=(_boundaryType==0?2:0) ; d-- ) DownSample( d , _sNodes , ( ConstPointer( Real ) )_constraints + _sNodes.nodeCount[d] , _constraints+_sNodes.nodeCount[d-1] );
 
 	// Add the accumulated constraints from all finer depths
 #pragma omp parallel for num_threads( threads )
-	for( int i=0 ; i<_sNodes.nodeCount[maxDepth] ; i++ ) constraints[i] += _constraints[i];//线程累加，maxDepth=_sNodes.maxDepth - 1，少了_sNodes最后一层的node
-
+	for( int i=0 ; i<_sNodes.nodeCount[maxDepth] ; i++ ) constraints[i] += _constraints[i];
+	//线程累加，maxDepth=_sNodes.maxDepth - 1，少了_sNodes最后一层的node，把刚才DownSample的结果更新到全局变量constraint中
 	FreePointer( _constraints );
 
 
-	std::vector< Point3D< Real > > coefficients( _sNodes.nodeCount[maxDepth] , zeroPoint );
+	std::vector< Point3D< Real > > coefficients( _sNodes.nodeCount[maxDepth] , zeroPoint );//_sNodes.nodeCount[maxDepth]代表所有父节点的node数目
 	for( int d=maxDepth-1 ; d>=0 ; d-- )//maxDepth等于_sNodes.MaxDepth -1
 	{
 #pragma omp parallel for num_threads( threads )
@@ -2688,7 +2702,7 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 	// Coarse-to-fine up-sampling of coefficients，用child和parent之间的位置关系来进行加权，更新finer resolution coefficients
 	for( int d=(_boundaryType==0?2:0) ; d<maxDepth ; d++ ) UpSample( d , _sNodes , ( ConstPointer( Point3D< Real > ) ) GetPointer( coefficients ) + _sNodes.nodeCount[d-1] , GetPointer( coefficients ) + _sNodes.nodeCount[d] );//这里没有问题???d=0时d-1小于零；如果认为d代表finer depth，那么d应该从1或者minDepth+1开始吧
 
-	// Compute the contribution from all coarser depths
+	// Compute the contribution from all coarser depths，为什么最后又重新更新了coarse depth对finer的constraint
 	for( int d=0 ; d<=maxDepth ; d++ )//maxDepth = _sNodes.maxDepth - 1;
 	{
 		size_t start = _sNodes.nodeCount[d] , end = _sNodes.nodeCount[d+1] , range = end - start;
@@ -2730,14 +2744,15 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 			int d , off[3];
 			node->depthAndOffset( d , off );
 			for( int x=startX ; x<endX ; x++ ) for( int y=startY ; y<endY ; y++ ) for( int z=startZ ; z<endZ ; z++ )
+			{
 				if( neighbors5.neighbors[x][y][z] )//parent node neighbor
 				{
 					TreeOctNode* _node = neighbors5.neighbors[x][y][z];
 					int _i = _node->nodeData.nodeIndex;//parent node index
-					if( isInterior )
+					if( isInterior )//isInterior为真，直接使用模板数据
 					{
 						Point3D< double >& div = _stencil.values[x][y][z];
-						Point3D< Real >& normal = coefficients[_i];
+						Point3D< Real >& normal = coefficients[_i];//这里用的是upsample的normal field
 						constraint += Real( div[0] * normal[0] + div[1] * normal[1] + div[2] * normal[2] );
 					}
 					else
@@ -2747,7 +2762,8 @@ Pointer( Real ) Octree< Real >::SetLaplacianConstraints( const SparseNodeData< P
 						constraint += Real( GetDivergence2( integrator , d , off , _off , true , coefficients[_i] ) );
 					}
 				}
-				constraints[ node->nodeData.nodeIndex ] += constraint;
+			}
+			constraints[ node->nodeData.nodeIndex ] += constraint;
 		}
 	}
 	MemoryUsage();
@@ -2761,7 +2777,9 @@ template< class Real >
 template< class V >
 V Octree< Real >::getCenterValue( const typename TreeOctNode::ConstNeighborKey3& neighborKey , const TreeOctNode* node , ConstPointer( V ) solution , ConstPointer( V ) metSolution , const typename BSplineData< 2 >::template CenterEvaluator< 1 >& evaluator , const Stencil< double , 3 >& stencil , const Stencil< double , 3 >& pStencil , bool isInterior ) const
 {
-	if( node->children ) fprintf( stderr , "[WARNING] getCenterValue assumes leaf node\n" );
+	//stencil是相同Depth下的stencil，pStencil是child与parent的stencil，isInterior表示边界flag
+	//metSolution记录了自上而下的upSample过的求解结果，solution记录原始求解结果
+	if( node->children ) fprintf( stderr , "[WARNING] getCenterValue assumes leaf node\n" );//只允许leaf node，也就是最后一层的node
 	V value(0);
 
 	int d , off[3];
@@ -2769,20 +2787,22 @@ V Octree< Real >::getCenterValue( const typename TreeOctNode::ConstNeighborKey3&
 
 	if( isInterior )
 	{
+		//isInterior代表非边界node，处理的是正常情况，两侧的neighbor node都存在
 		for( int i=0 ; i<3 ; i++ ) for( int j=0 ; j<3 ; j++ ) for( int k=0 ; k<3 ; k++ )
 		{
 			const TreeOctNode* n = neighborKey.neighbors[d].neighbors[i][j][k];
-			if( n ) value += solution[ n->nodeData.nodeIndex ] * Real( stencil.values[i][j][k] );
+			if( n ) value += solution[ n->nodeData.nodeIndex ] * Real( stencil.values[i][j][k] );//同一层之间node center value的weighted average
 		}
 		if( d>_minDepth )
 			for( int i=0 ; i<3 ; i++ ) for( int j=0 ; j<3 ; j++ ) for( int k=0 ; k<3 ; k++ )
 			{
 				const TreeOctNode* n = neighborKey.neighbors[d-1].neighbors[i][j][k];
-				if( n ) value += metSolution[n->nodeData.nodeIndex] * Real( pStencil.values[i][j][k] );
+				if( n ) value += metSolution[n->nodeData.nodeIndex] * Real( pStencil.values[i][j][k] );//从parent处upsample过的solution的weighted average
 			}
 	}
 	else
 	{
+		//非标准型
 		for( int i=0 ; i<3 ; i++ ) for( int j=0 ; j<3 ; j++ ) for( int k=0 ; k<3 ; k++ )
 		{
 			const TreeOctNode* n = neighborKey.neighbors[d].neighbors[i][j][k];
@@ -2790,6 +2810,7 @@ V Octree< Real >::getCenterValue( const typename TreeOctNode::ConstNeighborKey3&
 			{
 				int _d , _off[3];
 				n->depthAndOffset( _d , _off );
+				//无标准模式，临时单独求解
 				value +=
 					solution[ n->nodeData.nodeIndex ] * Real(
 					evaluator.value( d , off[0] , _off[0] , false , false ) * evaluator.value( d , off[1] , _off[1] , false , false ) * evaluator.value( d , off[1] , _off[1] , false , false ) );

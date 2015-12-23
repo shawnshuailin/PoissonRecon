@@ -124,27 +124,28 @@ double BSplineData< Degree >::CenterEvaluator< Radius >::value( int depth , int 
 	if( depth<0 || depth>=int( vTables.size() ) ) return 0.;
 	if( childParent )
 	{
-		int c = off1&1;//保留off1的最后一位，这一位代表了在当前Depth划分时的offset，下面除以2求其parent index的时候就会把这个信息抹掉
-		off1 >>= 1 , depth--;//为什么肯定off1就比off2多了一层，非要在深度上减一
+		int c = off1&1;//保留off1的最后一位，这一位代表了在当前Depth划分时的offset，下面除以2求其parent index
+		off1 >>= 1 , depth--;//设定的是child与parent关系，因此depth只相差1，off1为child，off2为parent
 		const typename CenterEvaluator::ValueTables& vTable = vTables[depth];
-		int ii , dd = off1-off2 , res = (1<<depth);
+		int ii , dd = off1-off2 , res = (1<<depth);//off1除以2，depth自减1之后都在off2这一层
 		if( depth<0 || off1<0 || off2<0 || off1>=res || off2>=res || dd<-Radius || dd>Radius ) return 0;
-		if     ( off2<     Degree ) ii = off2;
-		else if( off2>=res-Degree ) ii = 2*Degree + off2 - (res-1);//估计中间符合条件的只占了ii=Degree那一个数组，剩下都分散了
+		if     ( off2<     Degree ) ii = off2;//左侧边界两种情况
+		else if( off2>=res-Degree ) ii = 2*Degree + off2 - (res-1);//右侧边界两种情况
 		else                        ii = Degree;
 		if( d ) return vTable.dValues[ii][(dd+Radius)*3+2*c];//明白了，之所以有*3的约束，index为1时放了在同一个Depth下的数据，见下面的code
 		//而index为0或者2时放了两个child的数据
-		else    return vTable.vValues[ii][(dd+Radius)*3+2*c];
+		else    return vTable.vValues[ii][(dd+Radius)*3+2*c];//abs(dd) <Radius，这里要加上Radius访问vValues，c代表off1在其parent下处于左侧或者右侧
 	}
 	else
 	{
+		//同一depth下，属于正常情况，只判断off2是否在两侧边界以及abs(dd)<Radius
 		const typename CenterEvaluator::ValueTables& vTable = vTables[depth];
 		int ii , dd = off1-off2 , res = (1<<depth);
-		if( off1<0 || off2<0 || off1>=res || off2>=res || dd<-Radius || dd>Radius ) return 0;
-		if     ( off2<     Degree ) ii = off2;
-		else if( off2>=res-Degree ) ii = 2*Degree + off2 - (res-1);
+		if( off1<0 || off2<0 || off1>=res || off2>=res || dd<-Radius || dd>Radius ) return 0;//两个offset要满足要求
+		if     ( off2<     Degree ) ii = off2;//左侧两个
+		else if( off2>=res-Degree ) ii = 2*Degree + off2 - (res-1);//右侧两个
 		else                        ii = Degree;
-		if( d ) return vTable.dValues[ii][(dd+Radius)*3+1];//乘以3之后，只取第一个，剩下的两个是两个child的数据
+		if( d ) return vTable.dValues[ii][(dd+Radius)*3+1];//乘以3之后，只取中间那一个，剩下的两个是两个child的数据
 		else    return vTable.vValues[ii][(dd+Radius)*3+1];
 	}
 }
@@ -372,12 +373,15 @@ template< int Degree >
 template< int Radius >
 void BSplineData< Degree >::setCenterEvaluator( CenterEvaluator< Radius >& evaluator , double smoothingRadius , double dSmoothingRadius , bool inset ) const
 {
-	evaluator.vTables.resize( depth+1 );
-	for( int d=0 ; d<=depth ; d++ ) for( int i=0 ; i<=2*Degree ; i++ ) for( int j=-Radius ; j<=Radius ; j++ ) for( int k=-1 ; k<=1 ; k++ )
+	//外面调用时两个smoothingRadius都等于0
+	evaluator.vTables.resize( depth+1 );//vTables为每个depth都分配了空间
+	for( int d=0 ; d<=depth ; d++ ) for( int i=0 ; i<=2*Degree ; i++ ) for( int j=-Radius ; j<=Radius ; j++ ) for( int k=-1 ; k<=1 ; k++ )//声明evaluators时，Radius=1
 	{
-		int res = 1<<d , ii = (i<=Degree ? i : i+res-1 - 2*Degree );
-		double s = 0.5+ii+j+0.25*k;//这是什么公式???
-		evaluator.vTables[d].vValues[i][(j+Radius)*3+(k+1)] = value( d , ii ,  smoothingRadius , s/res , false , inset );
+		int res = 1<<d , ii = (i<=Degree ? i : i+res-1 - 2*Degree );//两个边界，[0, Degree-1]以及[res-Degree, res-1]
+		//vValues包括同一层的evaluator以及child与parent的evaluator，k=0是同一层，代表当前中心点位置，k=-1，s=ii+j+0.25，代表左侧child中心点位置
+		//k=1, s=ii+j+0.75,代表右侧child中心点位置
+		double s = 0.5+ii+j+0.25*k;
+		evaluator.vTables[d].vValues[i][(j+Radius)*3+(k+1)] = value( d , ii ,  smoothingRadius , s/res , false , inset );//计算出来的应该是权重数据，后面用在计算node center value中
 		evaluator.vTables[d].dValues[i][(j+Radius)*3+(k+1)] = value( d , ii , dSmoothingRadius , s/res , true  , inset );
 	}
 }

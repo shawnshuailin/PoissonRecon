@@ -362,8 +362,8 @@ int Execute( int argc , char* argv[] )
 
 	double maxMemoryUsage;
 	t=Time() , tree.maxMemoryUsage=0;
-	//输入的必须数据，位置与法向
 	//typename是显式告诉编译器，后面定义的一大串东西是一个类型，而不是一个变量，否则*在解释时会被误解，其次c++规定，在没有歧义时也要用，如等号后半段
+	//存储了screen weighted point position
 	typename Octree< Real >::template SparseNodeData< typename Octree< Real >::PointData >* pointInfo = new typename Octree< Real >::template SparseNodeData< typename Octree< Real >::PointData >();
 	//存储了splat normal数据
 	typename Octree< Real >::template SparseNodeData< Point3D< Real > >* normalInfo = new typename Octree< Real >::template SparseNodeData< Point3D< Real > >();

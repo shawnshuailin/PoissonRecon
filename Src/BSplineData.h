@@ -115,22 +115,22 @@ public:
 	double dot( int depth1 , int off1 , int depth2 , int off2 , bool d1 , bool d2 , bool inset=false ) const;
 	void setIntegrator( Integrator& integrator , bool inset , bool useDotRatios=false ) const;
 	template< int Radius >
-	struct CenterEvaluator//centerEvaluator应该是计算中心点的scalar function的值
+	struct CenterEvaluator//计算一维binary node下node与其neighbor的weight关系，上升到三维后就是stencil
 	{
 		struct ValueTables
 		{
-			double vValues[2*Degree+1][ 3*(2*Radius+1) ];//如果称作是radius，区间为[-radius..., 0, ..., radius]，
-			//而乘以3是因为index等于1是跟当前层neighbor的数据，剩下的两个是跟两个child neighbor的数据
-			double dValues[2*Degree+1][ 3*(2*Radius+1) ];//Degree是2*Degree+1是因为在两侧的边缘进行了特殊处理吧
+			double vValues[2*Degree+1][ 3*(2*Radius+1) ];//radius是node左右neighbor的范围，区间为[-radius..., 0, ..., radius]，
+			//而乘以3是因为index等于1的情况下是跟当前层neighbor的weight，index=0/2是跟两个child neighbor的weight
+			double dValues[2*Degree+1][ 3*(2*Radius+1) ];
 		};
 		std::vector< ValueTables > vTables;
 		double value( int depth , int off1 , int off2 , bool d , bool childParent=false ) const;
 	};
-	template< int Radius >
+	template< int Radius >//计算binary node下node与其neighbor的weight关系，上升到三维后就是stencil
 	void setCenterEvaluator( CenterEvaluator< Radius >& evaluator , double smoothingRadius , double dSmoothingRadius, bool inset ) const;
 	double value( int depth , int off , double smoothingRadius , double s , bool d , bool inset=false ) const;
 	template< int Radius >
-	struct CornerEvaluator//corner evaluators是用来计算corner点的scalar function的值
+	struct CornerEvaluator//计算一维binary node下corner point与其neighbor的weight关系，上升到三维后就是stencil
 	{
 		struct ValueTables
 		{

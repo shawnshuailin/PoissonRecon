@@ -228,58 +228,63 @@ void Octree< Real >::GetMCIsoSurface( ConstPointer( Real ) kernelDensityWeights 
 template< class Real >
 Real Octree< Real >::GetIsoValue( ConstPointer( Real ) solution , const std::vector< Real >& centerWeights )
 {
+	//利用所有node的weighted average作为isovalue
 	Real isoValue=0 , weightSum=0;
 	int maxDepth = tree.maxDepth();
 
-	typename BSplineData< 2 >::template CenterEvaluator< 1 > evaluator;
-	_fData.setCenterEvaluator( evaluator , 0 , 0 , _boundaryType==0 );
-	std::vector< CenterValueStencil > vStencils( maxDepth+1 );
+	typename BSplineData< 2 >::template CenterEvaluator< 1 > evaluator;//radius = 1???
+	_fData.setCenterEvaluator( evaluator , 0 , 0 , _boundaryType==0 );//计算binary node下node与其neighbor的weight关系，上升到三维后就是stencil
+	std::vector< CenterValueStencil > vStencils( maxDepth+1 );//每层一个???
 	for( int d=_minDepth ; d<=maxDepth ; d++ )
 	{
-		SetCenterEvaluationStencil ( evaluator , d , vStencils[d].stencil  );
-		SetCenterEvaluationStencils( evaluator , d , vStencils[d].stencils );
+		//evaluator计算好了是/不是边界情况下与neighbor间的weight，stencil也要区分这种情况，但evaluator只考虑了binary node一维情况，属于一维模板
+		//stencil考虑了三维情况，如果预先计算针对所有情况的模板，情况会特别复杂，所以只计算了标准型，后续特殊情况临时计算结果
+		SetCenterEvaluationStencil ( evaluator , d , vStencils[d].stencil  );//同一层depth下的标准型
+		SetCenterEvaluationStencils( evaluator , d , vStencils[d].stencils );//child parent下的标准型，根据子节点与parent node位置的不同分为八种情况
 	}
-	std::vector< Real > metSolution( _sNodes.nodeCount[maxDepth] , 0 );
-	std::vector< Real > centerValues( _sNodes.nodeCount[maxDepth+1] );
+	std::vector< Real > metSolution( _sNodes.nodeCount[maxDepth] , 0 );//此maxDepth = _sNodes.maxDepth - 1;
+	std::vector< Real > centerValues( _sNodes.nodeCount[maxDepth+1] );//Octree所有的有效node数目，因此center也有这么多
 #pragma omp parallel for num_threads( threads )
-	for( int i=_sNodes.nodeCount[_minDepth] ; i<_sNodes.nodeCount[maxDepth] ; i++ ) metSolution[i] = solution[i];
-	for( int d=_minDepth ; d<maxDepth ; d++ ) UpSample( d , _sNodes , ( ConstPointer( Real ) )GetPointer( metSolution ) + _sNodes.nodeCount[d-1] , GetPointer( metSolution ) + _sNodes.nodeCount[d] );
+	for( int i=_sNodes.nodeCount[_minDepth] ; i<_sNodes.nodeCount[maxDepth] ; i++ ) metSolution[i] = solution[i];//从minDepth开始一直到maxDepth-1层的node index
+	for( int d=_minDepth ; d<maxDepth ; d++ ) UpSample( d , _sNodes , ( ConstPointer( Real ) )GetPointer( metSolution ) + _sNodes.nodeCount[d-1] , GetPointer( metSolution ) + _sNodes.nodeCount[d] );//上采样，从parent到child
 	for( int d=maxDepth ; d>=_minDepth ; d-- )
 	{
 		std::vector< typename TreeOctNode::ConstNeighborKey3 > neighborKeys( std::max< int >( 1 , threads ) );
 		for( size_t i=0 ; i<neighborKeys.size() ; i++ ) neighborKeys[i].set( d );
 #pragma omp parallel for num_threads( threads ) reduction( + : isoValue , weightSum )
-		for( int i=_sNodes.nodeCount[d] ; i<_sNodes.nodeCount[d+1] ; i++ )
+		for( int i=_sNodes.nodeCount[d] ; i<_sNodes.nodeCount[d+1] ; i++ )//d层的node index起始和结束
 		{
 			typename TreeOctNode::ConstNeighborKey3& neighborKey = neighborKeys[ omp_get_thread_num() ];
 			TreeOctNode* node = _sNodes.treeNodes[i];
 			Real value = Real(0);
 			if( node->children )
 			{
+				//非leaf node用的是八个子节点的value平均值
 				for( int c=0 ; c<Cube::CORNERS ; c++ ) value += centerValues[ node->children[c].nodeData.nodeIndex ];
 				value /= Cube::CORNERS;
 			}
-			else
+			else//最后一层，无子节点
 			{
 				neighborKey.getNeighbors( node );
 				int c=0 , x , y , z;
-				if( node->parent ) c = int( node - node->parent->children );
-				Cube::FactorCornerIndex( c , x , y , z );
+				if( node->parent ) c = int( node - node->parent->children );//在node parent出的child index
+				Cube::FactorCornerIndex( c , x , y , z );//得到corner index
 
 				int d , off[3];
 				node->depthAndOffset( d , off );
 				int o = _boundaryType==0 ? (1<<(d-2)) : 0;
 				int mn = 2+o , mx = (1<<d)-2-o;
-				bool isInterior = ( off[0]>=mn && off[0]<mx && off[1]>=mn && off[1]<mx && off[2]>=mn && off[2]<mx );
+				bool isInterior = ( off[0]>=mn && off[0]<mx && off[1]>=mn && off[1]<mx && off[2]>=mn && off[2]<mx );//判断是否属于两种边界情况
 
-				value = getCenterValue( neighborKey , node , ( ConstPointer( Real ) )solution , ( ConstPointer( Real ) )GetPointer( metSolution ) , evaluator , vStencils[d].stencil , vStencils[d].stencils[c] , isInterior );
+				//处理leaf node的center value计算，包含了同一层的weighted average和parent node经过upSample后的weighted average
+				value = getCenterValue( neighborKey , node , ( ConstPointer( Real ) )solution , ( ConstPointer( Real ) )GetPointer( metSolution ) , evaluator , vStencils[d].stencil , vStencils[d].stencils[c] , isInterior );//vStencils[d].stencil是同一层下的stencil，vStencils[d].stencils[c]是child与parent的stencil，isInterior表示边界flag
 			}
 			centerValues[i] = value;
 			Real w = centerWeights[ node->nodeData.nodeIndex ];
-			if( w!=0 ) isoValue += value * w , weightSum += w;
+			if( w!=0 ) isoValue += value * w , weightSum += w;//从neighbor得到的value还要用node本身的weight再加权一次
 		}
 	}
-	return isoValue / weightSum;
+	return isoValue / weightSum;//所有node的weighted average
 }
 
 template< class Real >
